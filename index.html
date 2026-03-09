@@ -4,6 +4,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MindMetrics — Professional Psychology Assessment Platform</title>
+    <!-- Firebase SDK -->
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+      import {
+        getFirestore, collection, addDoc, onSnapshot, query, orderBy, limit,
+        doc, setDoc, deleteDoc, serverTimestamp, where, getDocs, updateDoc, getDoc
+      } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+      // ╔══════════════════════════════════════════════════════╗
+      // ║  PASTE YOUR FIREBASE CONFIG HERE                     ║
+      // ║  console.firebase.google.com → Project Settings →   ║
+      // ║  Your apps → Web → firebaseConfig                   ║
+      // ╚══════════════════════════════════════════════════════╝
+      const firebaseConfig = {
+        apiKey:            "AIzaSyA4EaEDsWRKXzxh2CVG6MB4fd3-PgB-KPw",
+        authDomain:        "mindmetrics-7165e.firebaseapp.com",
+        projectId:         "mindmetrics-7165e",
+        storageBucket:     "mindmetrics-7165e.firebasestorage.app",
+        messagingSenderId: "667540571296",
+        appId:             "1:667540571296:web:6379e2d24e029fc4e875c5"
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const db  = getFirestore(app);
+
+      // Expose db and Firestore helpers to global scope so non-module chat JS can use them
+      window._fb = {
+        db, collection, addDoc, onSnapshot, query, orderBy, limit,
+        doc, setDoc, deleteDoc, serverTimestamp, where, getDocs, updateDoc, getDoc
+      };
+      window._fbReady = true;
+      document.dispatchEvent(new Event('firebaseReady'));
+    </script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/docx@7.8.2/build/index.js"></script>
@@ -2723,14 +2756,14 @@ function showAlert(message,type) {
 })();
 
 // ═══════════════════════════════════════════════════
-//  CHAT SYSTEM
+//  CHAT SYSTEM  —  Firebase Firestore real-time
 // ═══════════════════════════════════════════════════
 
 const CHAT_ROOMS = {
-    anxiety:       { name:'Calm Space',    icon:'🌿', color:'#6ee7b7', gradient:'135deg,#059669,#0d9488' },
-    relationships: { name:'Heart Talk',    icon:'💞', color:'#fbcfe8', gradient:'135deg,#f472b6,#ec4899' },
-    mood:          { name:'Mood Lounge',   icon:'🌈', color:'#ddd6fe', gradient:'135deg,#7b68ee,#a78bfa' },
-    general:       { name:'Open Circle',   icon:'☕', color:'#fde68a', gradient:'135deg,#d97706,#fbbf24' }
+    anxiety:       { name:'Calm Space',    icon:'🌿', color:'#6ee7b7' },
+    relationships: { name:'Heart Talk',    icon:'💞', color:'#fbcfe8' },
+    mood:          { name:'Mood Lounge',   icon:'🌈', color:'#ddd6fe' },
+    general:       { name:'Open Circle',   icon:'☕', color:'#fde68a' }
 };
 
 const AVATAR_COLORS = [
@@ -2745,625 +2778,577 @@ const AVATAR_COLORS = [
 ];
 
 const EMOJIS = ['❤️','💙','🌿','✨','😊','😢','😰','🤗','💪','🙏','🌈','☕','🌙','⭐','💭','🦋','🌸','🕊️','💫','🎯'];
-
 const REACTION_EMOJIS = ['❤️','👍','🤗','💙','✨','😊'];
 
-// Simulated users for lively feel
-const BOT_NAMES = ['MorningLark','QuietRiver','StarGazer','CalmWave','SilverMist','WarmLight','GentleBreeze','TwilightEcho'];
-const BOT_MESSAGES = {
-    anxiety: [
-        "Has anyone tried box breathing? It really helps me during panic moments 🌿",
-        "Remember: anxiety is just your brain trying to protect you. Be kind to yourself 💙",
-        "I've been doing a 5-4-3-2-1 grounding exercise lately, works wonders",
-        "Good to be here with people who understand 🌈",
-        "Sometimes just naming the feeling helps. What is everyone feeling today?"
-    ],
-    relationships: [
-        "Communication is genuinely the hardest and most important thing 💞",
-        "Anyone else working on setting healthier boundaries this month?",
-        "Vulnerability is not weakness — it's the birthplace of connection ✨",
-        "Learning to love yourself first makes all other relationships healthier 💙",
-        "Just had a really good honest conversation with my partner. Feeling hopeful 🌸"
-    ],
-    mood: [
-        "Today was a 6/10. Slowly climbing back up 🌈",
-        "Journaling has honestly changed how I process emotions",
-        "Does anyone track their mood? I use a simple notebook",
-        "Small wins count. Made my bed today — that's enough ☀️",
-        "Sending good energy to everyone here tonight 💫"
-    ],
-    general: [
-        "This community is such a warm space ☕",
-        "How is everyone doing today? Checking in 🌿",
-        "Reminder: rest is productive. You don't have to earn it",
-        "Anyone have a self-care ritual they swear by? 🌙",
-        "Mental health is health. Full stop. 💙"
-    ]
-};
-
-// In-memory state (session only)
+// ── State ──────────────────────────────────────────
 let chatState = {
-    user: null,
+    user: null,           // { name, token, uid, avatarColor }
     room: 'anxiety',
-    messages: {},
-    onlineUsers: {},
-    dms: {},              // { targetName: { messages, unread, accepted } }
-    activePM: null,
-    pendingDMFrom: null,
     selectedRoom: 'anxiety',
-    typingTimeout: null,
-    pollInterval: null,
-    botInterval: null,
-    dmRequestTimeout: null,
-    aiLoading: false,
+    // Firestore unsubscribe handles
+    unsubMessages: null,
+    unsubPresence: null,
+    unsubDMInbox: null,
+    unsubPMThread: null,
+    // Local cache
+    roomMessages: {},     // { roomKey: [msg,...] }
+    onlineUsers: [],      // [{ name, uid, avatarColor }]
+    dms: {},              // { threadId: { messages:[], unread:0, otherName, threadId } }
+    activePM: null,       // threadId
+    pendingDMRequests: [],// incoming DM docs
     emojiOpen: false,
+    heartbeatInterval: null,
+    typingTimeout: null,
+    aiLoading: false,
 };
 
-// ── HELPERS ──────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────
 function generateToken() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let t = 'MM-';
-    for(let i=0;i<4;i++) t += chars[Math.floor(Math.random()*chars.length)];
-    t += '-';
-    for(let i=0;i<4;i++) t += chars[Math.floor(Math.random()*chars.length)];
+    const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let t='MM-';
+    for(let i=0;i<4;i++) t+=c[Math.floor(Math.random()*c.length)];
+    t+='-';
+    for(let i=0;i<4;i++) t+=c[Math.floor(Math.random()*c.length)];
     return t;
 }
-
+function generateUID() {
+    return Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+}
 function getAvatarColor(name) {
-    let hash = 0;
-    for(let i=0;i<name.length;i++) hash = name.charCodeAt(i) + ((hash<<5)-hash);
-    return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+    let h=0;
+    for(let i=0;i<name.length;i++) h=name.charCodeAt(i)+((h<<5)-h);
+    return AVATAR_COLORS[Math.abs(h)%AVATAR_COLORS.length];
 }
-
-function getInitials(name) {
-    return name.slice(0,2).toUpperCase();
+function getInitials(name){ return (name||'?').slice(0,2).toUpperCase(); }
+function formatTime(ts){
+    if(!ts) return '';
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
 }
-
-function formatTime(ts) {
-    const d = new Date(ts);
-    return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
-}
-
 function detectMood(text) {
-    const t = text.toLowerCase();
+    const t=text.toLowerCase();
     if(/anxious|panic|nervous|worry|scared|afraid|dread/.test(t)) return {tag:'Anxious',cls:'mood-anxious',icon:'😰'};
-    if(/sad|depressed|lonely|hopeless|cry|tears|down/.test(t)) return {tag:'Sad',cls:'mood-sad',icon:'😢'};
-    if(/love|romantic|heart|miss|kiss|adore|cherish/.test(t)) return {tag:'Romantic',cls:'mood-romantic',icon:'💞'};
+    if(/sad|depressed|lonely|hopeless|cry|tears|down/.test(t))    return {tag:'Sad',cls:'mood-sad',icon:'😢'};
+    if(/love|romantic|heart|miss|kiss|adore|cherish/.test(t))     return {tag:'Romantic',cls:'mood-romantic',icon:'💞'};
     if(/happy|great|wonderful|amazing|joy|grateful|excited/.test(t)) return {tag:'Happy',cls:'mood-happy',icon:'😊'};
-    if(/calm|peace|relax|content|serene|okay|fine/.test(t)) return {tag:'Calm',cls:'mood-calm',icon:'🌿'};
+    if(/calm|peace|relax|content|serene|okay|fine/.test(t))       return {tag:'Calm',cls:'mood-calm',icon:'🌿'};
     return {tag:'Sharing',cls:'mood-neutral',icon:'💭'};
 }
-
-function initRoomMessages() {
-    Object.keys(CHAT_ROOMS).forEach(room => {
-        if(!chatState.messages[room]) chatState.messages[room] = [];
-    });
+function escapeHtml(t){ return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
+function dmThreadId(a,b){ return [a,b].sort().join('__'); }
+function waitForFirebase(cb){
+    if(window._fbReady) cb(window._fb);
+    else document.addEventListener('firebaseReady',()=>cb(window._fb),{once:true});
 }
 
-function initRoomUsers() {
-    Object.keys(CHAT_ROOMS).forEach(room => {
-        if(!chatState.onlineUsers[room]) {
-            // Add 2-3 simulated users per room
-            const count = 2 + Math.floor(Math.random()*2);
-            chatState.onlineUsers[room] = [];
-            for(let i=0;i<count;i++) {
-                const name = BOT_NAMES[Math.floor(Math.random()*BOT_NAMES.length)];
-                chatState.onlineUsers[room].push({ name, avatarColor: getAvatarColor(name), isBot:true });
-            }
-        }
-    });
-}
-
-// ── NAVIGATION ──────────────────────────────────────
+// ── Navigation ─────────────────────────────────────
 function showChat() {
-    document.getElementById('landing').style.display = 'none';
-    document.getElementById('app').style.display     = 'none';
-    document.getElementById('chat').style.display    = 'flex';
-    document.getElementById('chatLogin').style.display = 'flex';
+    document.getElementById('landing').style.display='none';
+    document.getElementById('app').style.display='none';
+    document.getElementById('chat').style.display='flex';
+    document.getElementById('chatLogin').style.display='flex';
     document.getElementById('chatRoom').classList.remove('active');
     window.scrollTo(0,0);
-    // Generate token on load
-    document.getElementById('sessionToken').textContent = generateToken();
-    initRoomMessages();
-    initRoomUsers();
+    document.getElementById('sessionToken').textContent=generateToken();
     populateEmojiPicker();
-    // Add welcome messages
-    addWelcomeMessages();
 }
-
-function showLandingFromChat() {
-    stopChatPolling();
-    document.getElementById('chat').style.display = 'none';
-    document.getElementById('landing').style.display = 'block';
-    window.scrollTo(0,0);
-}
-
-// Override showLanding to also handle chat page
-const _origShowLanding = showLanding;
-function showLanding() {
-    document.getElementById('chat').style.display = 'none';
+const _origShowLanding=showLanding;
+function showLanding(){
+    document.getElementById('chat').style.display='none';
     _origShowLanding();
 }
 
-// ── LOGIN ────────────────────────────────────────────
-function selectRoom(el) {
+// ── Login ──────────────────────────────────────────
+function selectRoom(el){
     document.querySelectorAll('.chat-room-opt').forEach(o=>o.classList.remove('selected'));
     el.classList.add('selected');
-    chatState.selectedRoom = el.dataset.room;
+    chatState.selectedRoom=el.dataset.room;
 }
-
-function copyToken() {
-    const tok = document.getElementById('sessionToken').textContent;
+function copyToken(){
+    const tok=document.getElementById('sessionToken').textContent;
     navigator.clipboard.writeText(tok).then(()=>{
-        const btn = document.querySelector('.chat-session-copy');
-        btn.textContent = 'Copied!';
-        setTimeout(()=>btn.textContent='Copy',2000);
+        const btn=document.querySelector('.chat-session-copy');
+        btn.textContent='Copied!'; setTimeout(()=>btn.textContent='Copy',2000);
     });
 }
-
-function joinChat() {
-    const name = document.getElementById('chatUsername').value.trim();
-    if(!name || name.length < 2) {
-        document.getElementById('chatUsername').style.borderColor = 'rgba(248,113,113,.6)';
+function joinChat(){
+    const name=document.getElementById('chatUsername').value.trim();
+    if(!name||name.length<2){
+        document.getElementById('chatUsername').style.borderColor='rgba(248,113,113,.6)';
         setTimeout(()=>document.getElementById('chatUsername').style.borderColor='',2000);
         return;
     }
-    const token = document.getElementById('sessionToken').textContent;
-    enterChatRoom(name, token, chatState.selectedRoom);
+    const token=document.getElementById('sessionToken').textContent;
+    const uid=generateUID();
+    enterChatRoom(name,token,uid,chatState.selectedRoom);
 }
-
-function rejoinChat() {
-    const token = document.getElementById('rejoinToken').value.trim();
-    if(!token.startsWith('MM-')) {
-        document.getElementById('rejoinToken').style.borderColor = 'rgba(248,113,113,.6)';
+function rejoinChat(){
+    const token=document.getElementById('rejoinToken').value.trim();
+    if(!token.startsWith('MM-')){
+        document.getElementById('rejoinToken').style.borderColor='rgba(248,113,113,.6)';
         setTimeout(()=>document.getElementById('rejoinToken').style.borderColor='',2000);
         return;
     }
-    // Derive a name from token
-    const name = 'User_' + token.split('-')[1];
-    enterChatRoom(name, token, chatState.selectedRoom);
+    const name='User_'+token.split('-')[1];
+    const uid=generateUID();
+    enterChatRoom(name,token,uid,chatState.selectedRoom);
 }
 
-function enterChatRoom(name, token, room) {
-    chatState.user = {
-        name, token, room,
-        avatarColor: getAvatarColor(name),
-        avatarIdx: Math.abs(name.charCodeAt(0)) % AVATAR_COLORS.length
-    };
-    chatState.room = room;
-    chatState.dms = {};
-    chatState.activePM = null;
+function enterChatRoom(name,token,uid,room){
+    chatState.user={name,token,uid,room,avatarColor:getAvatarColor(name)};
+    chatState.room=room;
+    chatState.dms={};
+    chatState.activePM=null;
+    chatState.roomMessages={};
 
-    // Add user to online list
-    if(!chatState.onlineUsers[room]) chatState.onlineUsers[room] = [];
-    const existing = chatState.onlineUsers[room].find(u=>u.name===name);
-    if(!existing) chatState.onlineUsers[room].push({ name, avatarColor: getAvatarColor(name), isBot:false });
-
-    // Switch views
-    document.getElementById('chatLogin').style.display = 'none';
+    // Update header UI
+    const rm=CHAT_ROOMS[room];
+    document.getElementById('chatRoomName').textContent=`${rm.icon} ${rm.name}`;
+    document.getElementById('chatHeaderUser').textContent=name;
+    const hav=document.getElementById('chatHeaderAvatar');
+    hav.textContent=getInitials(name);
+    hav.style.background=getAvatarColor(name);
+    document.getElementById('chatLogin').style.display='none';
     document.getElementById('chatRoom').classList.add('active');
+    switchSidebarTab('users');
 
-    // Update header
-    const rm = CHAT_ROOMS[room];
-    document.getElementById('chatRoomName').textContent = `${rm.icon} ${rm.name}`;
-    document.getElementById('chatHeaderUser').textContent = name;
-    document.getElementById('chatHeaderAvatar').textContent = getInitials(name);
-    document.getElementById('chatHeaderAvatar').style.background = getAvatarColor(name);
-
-    // Post join message
-    addSystemMessage(`${name} joined the room ✨`, room);
-
-    renderMessages();
-    renderOnlineList();
-    updateRoomCounts();
-    renderDMList();
-    startChatPolling();
-    startBotActivity();
-
-    // Schedule a simulated incoming DM request after 25-45 seconds
-    chatState.dmRequestTimeout = setTimeout(simulateIncomingDMRequest, 25000 + Math.random()*20000);
-
-    const ta = document.getElementById('chatTextarea');
-    ta.focus();
-    ta.addEventListener('input', handleTypingInput);
-    ta.addEventListener('keydown', function(e) {
-        if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    waitForFirebase(fb=>{
+        // Write presence
+        writePresence(fb,room);
+        // Subscribe room messages
+        subscribeRoom(fb,room);
+        // Subscribe presence list
+        subscribePresence(fb,room);
+        // Subscribe DM inbox (incoming requests)
+        subscribeDMInbox(fb);
     });
-    ta.addEventListener('input', function() {
-        this.style.height = 'auto';
-        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+
+    // Wire textarea
+    const ta=document.getElementById('chatTextarea');
+    ta.value='';
+    ta.focus();
+    // Remove old listeners by cloning
+    const newTa=ta.cloneNode(true);
+    ta.parentNode.replaceChild(newTa,ta);
+    newTa.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} });
+    newTa.addEventListener('input',function(){
+        this.style.height='auto';
+        this.style.height=Math.min(this.scrollHeight,120)+'px';
     });
 }
 
-function leaveChat() {
-    if(chatState.user) {
-        addSystemMessage(`${chatState.user.name} left the room`, chatState.room);
-        chatState.onlineUsers[chatState.room] = chatState.onlineUsers[chatState.room]
-            .filter(u=>u.name !== chatState.user.name);
-    }
-    stopChatPolling();
-    if(chatState.dmRequestTimeout) { clearTimeout(chatState.dmRequestTimeout); chatState.dmRequestTimeout=null; }
+function leaveChat(){
+    waitForFirebase(fb=>{
+        if(chatState.user){
+            const {db,doc,deleteDoc}=fb;
+            // Remove presence
+            deleteDoc(doc(db,'presence',chatState.user.uid)).catch(()=>{});
+        }
+    });
+    // Unsubscribe all listeners
+    ['unsubMessages','unsubPresence','unsubDMInbox','unsubPMThread'].forEach(k=>{
+        if(chatState[k]){ chatState[k](); chatState[k]=null; }
+    });
+    clearInterval(chatState.heartbeatInterval);
     document.getElementById('dmRequestToast').classList.remove('show');
     closePM();
-    chatState.user = null;
-    chatState.dms = {};
-    chatState.activePM = null;
+    chatState.user=null;
+    chatState.dms={};
+    chatState.roomMessages={};
+    chatState.onlineUsers=[];
     document.getElementById('chatRoom').classList.remove('active');
-    document.getElementById('chatLogin').style.display = 'flex';
-    document.getElementById('sessionToken').textContent = generateToken();
-    // Reset sidebar tab
+    document.getElementById('chatLogin').style.display='flex';
+    document.getElementById('sessionToken').textContent=generateToken();
     switchSidebarTab('users');
 }
 
-// ── MESSAGES ────────────────────────────────────────
-function addSystemMessage(text, room) {
-    if(!chatState.messages[room]) chatState.messages[room] = [];
-    chatState.messages[room].push({
-        id: Date.now() + Math.random(),
-        type: 'system',
-        text,
-        ts: Date.now()
+// ── Presence ───────────────────────────────────────
+function writePresence(fb,room){
+    const {db,doc,setDoc,serverTimestamp}=fb;
+    const {uid,name,avatarColor}=chatState.user;
+    const ref=doc(db,'presence',uid);
+    const data={uid,name,avatarColor,room,lastSeen:serverTimestamp()};
+    setDoc(ref,data).catch(()=>{});
+    // Heartbeat every 30s
+    clearInterval(chatState.heartbeatInterval);
+    chatState.heartbeatInterval=setInterval(()=>{
+        setDoc(ref,{...data,lastSeen:serverTimestamp()},{merge:true}).catch(()=>{});
+    },30000);
+    // Clean up on page unload
+    window.addEventListener('beforeunload',()=>{ try{ navigator.sendBeacon && deletePresence(fb); }catch(e){} });
+}
+function deletePresence(fb){
+    const {db,doc,deleteDoc}=fb;
+    if(chatState.user) deleteDoc(doc(db,'presence',chatState.user.uid)).catch(()=>{});
+}
+function subscribePresence(fb,room){
+    const {db,collection,query,where,onSnapshot}=fb;
+    if(chatState.unsubPresence){ chatState.unsubPresence(); }
+    // Show users in the same room, seen in last 90 seconds
+    const q=query(collection(db,'presence'),where('room','==',room));
+    chatState.unsubPresence=onSnapshot(q,snap=>{
+        const now=Date.now();
+        chatState.onlineUsers=snap.docs
+            .map(d=>d.data())
+            .filter(u=>{
+                if(!u.lastSeen) return true;
+                const ts=u.lastSeen.toDate?u.lastSeen.toDate().getTime():u.lastSeen;
+                return (now-ts)<90000;
+            });
+        renderOnlineList();
+        updateRoomCounts();
     });
 }
 
-function addUserMessage(name, text, room, isMe=false) {
-    if(!chatState.messages[room]) chatState.messages[room] = [];
-    const mood = detectMood(text);
-    chatState.messages[room].push({
-        id: Date.now() + Math.random(),
-        type: 'user',
-        name, text, mood,
-        avatarColor: getAvatarColor(name),
-        ts: Date.now(),
-        isMe,
-        reactions: {}
+// ── Room Messages ──────────────────────────────────
+function subscribeRoom(fb,room){
+    const {db,collection,query,orderBy,limit,onSnapshot}=fb;
+    if(chatState.unsubMessages){ chatState.unsubMessages(); }
+    // Load last 80 messages, then listen for new ones
+    const q=query(collection(db,`rooms/${room}/messages`),orderBy('ts','asc'),limit(80));
+    chatState.unsubMessages=onSnapshot(q,snap=>{
+        const msgs=snap.docs.map(d=>({id:d.id,...d.data()}));
+        chatState.roomMessages[room]=msgs;
+        if(chatState.room===room) renderMessages();
     });
+    // System "joined" message
+    waitForFirebase(fb2=>postSystemMessage(fb2,room,`${chatState.user.name} joined the room ✨`));
 }
 
-function addWelcomeMessages() {
-    Object.keys(CHAT_ROOMS).forEach(room => {
-        if(chatState.messages[room].length === 0) {
-            addSystemMessage(`Welcome to ${CHAT_ROOMS[room].icon} ${CHAT_ROOMS[room].name} — a safe, anonymous space`, room);
-            // Add a couple of bot messages
-            const bots = chatState.onlineUsers[room] ? chatState.onlineUsers[room].filter(u=>u.isBot) : [];
-            if(bots.length > 0 && BOT_MESSAGES[room]) {
-                const msgs = BOT_MESSAGES[room];
-                const bot = bots[0];
-                addUserMessage(bot.name, msgs[0], room, false);
-                if(bots.length > 1 && msgs.length > 1) {
-                    chatState.messages[room][chatState.messages[room].length-1].ts -= 120000;
-                    addUserMessage(bots[Math.min(1,bots.length-1)].name, msgs[1], room, false);
-                    chatState.messages[room][chatState.messages[room].length-1].ts -= 60000;
-                }
-            }
-        }
-    });
-}
-
-function sendMessage() {
+async function sendMessage(){
     if(!chatState.user) return;
-    const ta = document.getElementById('chatTextarea');
-    const text = ta.value.trim();
+    const ta=document.getElementById('chatTextarea');
+    const text=ta.value.trim();
     if(!text) return;
-    addUserMessage(chatState.user.name, text, chatState.room, true);
-    ta.value = '';
-    ta.style.height = 'auto';
-    renderMessages();
-    scrollToBottom();
-    clearTimeout(chatState.typingTimeout);
-    document.getElementById('typingIndicator').textContent = '';
-    // Hide AI suggestions
+    ta.value=''; ta.style.height='auto';
     document.getElementById('aiSuggestions').classList.remove('visible');
+    waitForFirebase(async fb=>{
+        const {db,collection,addDoc,serverTimestamp}=fb;
+        const mood=detectMood(text);
+        await addDoc(collection(db,`rooms/${chatState.room}/messages`),{
+            type:'user',
+            name:chatState.user.name,
+            uid:chatState.user.uid,
+            avatarColor:chatState.user.avatarColor,
+            text,
+            mood,
+            reactions:{},
+            ts:serverTimestamp()
+        }).catch(e=>console.error('Send failed:',e));
+    });
 }
 
-// ── RENDER ───────────────────────────────────────────
-function renderMessages() {
-    const container = document.getElementById('chatMessages');
-    const msgs = chatState.messages[chatState.room] || [];
-    container.innerHTML = '';
+function postSystemMessage(fb,room,text){
+    const {db,collection,addDoc,serverTimestamp}=fb;
+    addDoc(collection(db,`rooms/${room}/messages`),{
+        type:'system', text, ts:serverTimestamp()
+    }).catch(()=>{});
+}
 
-    let lastDate = '';
-    msgs.forEach(msg => {
-        const d = new Date(msg.ts).toLocaleDateString('en-GB',{weekday:'short',month:'short',day:'numeric'});
-        if(d !== lastDate) {
-            lastDate = d;
-            const divider = document.createElement('div');
-            divider.className = 'chat-day-divider';
-            divider.innerHTML = `<span>${d}</span>`;
-            container.appendChild(divider);
+async function addReaction(msgId,emoji){
+    if(!chatState.user) return;
+    waitForFirebase(async fb=>{
+        const {db,doc,getDoc,updateDoc}=fb;
+        const ref=doc(db,`rooms/${chatState.room}/messages`,msgId);
+        const snap=await getDoc(ref);
+        if(!snap.exists()) return;
+        const reactions=snap.data().reactions||{};
+        reactions[emoji]=(reactions[emoji]||0)+1;
+        await updateDoc(ref,{reactions}).catch(()=>{});
+    });
+}
+
+// ── Render Room Messages ───────────────────────────
+function renderMessages(){
+    const container=document.getElementById('chatMessages');
+    const msgs=chatState.roomMessages[chatState.room]||[];
+    const wasAtBottom=container.scrollHeight-container.scrollTop-container.clientHeight<60;
+    container.innerHTML='';
+    let lastDate='';
+    msgs.forEach(msg=>{
+        const rawTs=msg.ts;
+        const d=rawTs ? (rawTs.toDate?rawTs.toDate():new Date(rawTs)).toLocaleDateString('en-GB',{weekday:'short',month:'short',day:'numeric'}) : 'Today';
+        if(d!==lastDate){
+            lastDate=d;
+            const div=document.createElement('div');
+            div.className='chat-day-divider';
+            div.innerHTML=`<span>${d}</span>`;
+            container.appendChild(div);
         }
-
-        if(msg.type === 'system') {
-            const g = document.createElement('div');
-            g.className = 'msg-group system-group';
-            g.innerHTML = `<div class="msg-bubble">${msg.text}</div>`;
+        if(msg.type==='system'){
+            const g=document.createElement('div');
+            g.className='msg-group system-group';
+            g.innerHTML=`<div class="msg-bubble">${escapeHtml(msg.text)}</div>`;
             container.appendChild(g);
             return;
         }
-
-        const isMe = msg.isMe;
-        const g = document.createElement('div');
-        g.className = `msg-group ${isMe?'mine':'theirs'}`;
-        g.dataset.msgId = msg.id;
-
-        // Mood tag
-        const moodHtml = msg.mood ? `<span class="msg-mood ${msg.mood.cls}">${msg.mood.icon} ${msg.mood.tag}</span>` : '';
-
-        // Reactions
-        const reactHtml = REACTION_EMOJIS.map(e => {
-            const count = (msg.reactions && msg.reactions[e]) || 0;
-            const cls = count > 0 ? 'reaction-btn reacted' : 'reaction-btn';
-            return `<button class="${cls}" onclick="addReaction('${msg.id}','${e}')">${e}${count>0?` <span>${count}</span>`:''}</button>`;
+        const isMe=chatState.user&&msg.uid===chatState.user.uid;
+        const g=document.createElement('div');
+        g.className=`msg-group ${isMe?'mine':'theirs'}`;
+        g.dataset.msgId=msg.id;
+        const moodHtml=msg.mood?`<span class="msg-mood ${msg.mood.cls}">${msg.mood.icon} ${msg.mood.tag}</span>`:'';
+        const reactHtml=REACTION_EMOJIS.map(e=>{
+            const cnt=(msg.reactions&&msg.reactions[e])||0;
+            const cls=cnt>0?'reaction-btn reacted':'reaction-btn';
+            return `<button class="${cls}" onclick="addReaction('${msg.id}','${e}')">${e}${cnt>0?` <span>${cnt}</span>`:''}</button>`;
         }).join('');
-
-        g.innerHTML = `
+        g.innerHTML=`
             <div class="msg-meta">
-                <div class="msg-avatar" style="background:${msg.avatarColor}">${getInitials(msg.name)}</div>
-                <span class="msg-username">${isMe?'You':msg.name}</span>
+                <div class="msg-avatar" style="background:${msg.avatarColor||getAvatarColor(msg.name)}">${getInitials(msg.name)}</div>
+                <span class="msg-username">${isMe?'You':escapeHtml(msg.name)}</span>
                 <span class="msg-time">${formatTime(msg.ts)}</span>
             </div>
             ${!isMe?`<div style="padding-left:40px;margin-bottom:4px">${moodHtml}</div>`:`<div style="text-align:right;margin-bottom:4px">${moodHtml}</div>`}
-            <div class="${!isMe?'':''}"><div class="msg-bubble" style="${!isMe?'':'margin-left:auto'}">${escapeHtml(msg.text)}</div></div>
+            <div><div class="msg-bubble" style="${isMe?'margin-left:auto':''}">${escapeHtml(msg.text)}</div></div>
             <div class="msg-reactions" style="${isMe?'justify-content:flex-end':''}">${reactHtml}</div>`;
         container.appendChild(g);
     });
-
-    // Update online count
-    const room = chatState.room;
-    const count = chatState.onlineUsers[room] ? chatState.onlineUsers[room].length : 1;
-    document.getElementById('onlineCount').textContent = count;
+    const count=chatState.onlineUsers.length||1;
+    document.getElementById('onlineCount').textContent=count;
+    if(wasAtBottom) scrollToBottom();
 }
 
-function escapeHtml(text) {
-    return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+function scrollToBottom(){ const c=document.getElementById('chatMessages'); c.scrollTop=c.scrollHeight; }
+
+// ── Room switch ────────────────────────────────────
+function switchRoom(btn){
+    const room=btn.dataset.room;
+    // Update presence room
+    waitForFirebase(fb=>{
+        const {db,doc,setDoc,serverTimestamp}=fb;
+        setDoc(doc(db,'presence',chatState.user.uid),{room,lastSeen:serverTimestamp()},{merge:true}).catch(()=>{});
+        // Unsubscribe old, subscribe new
+        chatState.room=room;
+        subscribeRoom(fb,room);
+        subscribePresence(fb,room);
+    });
+    document.querySelectorAll('.chat-room-switch-btn').forEach(b=>b.classList.remove('active-room'));
+    btn.classList.add('active-room');
+    const rm=CHAT_ROOMS[room];
+    document.getElementById('chatRoomName').textContent=`${rm.icon} ${rm.name}`;
+    document.getElementById('aiSuggestions').classList.remove('visible');
 }
 
-function scrollToBottom() {
-    const c = document.getElementById('chatMessages');
-    c.scrollTop = c.scrollHeight;
-}
-
-function renderOnlineList() {
-    const list = document.getElementById('onlineList');
-    list.innerHTML = '';
-    const users = chatState.onlineUsers[chatState.room] || [];
-    users.forEach(u => {
-        const isMe = chatState.user && u.name === chatState.user.name;
-        const item = document.createElement('div');
-        item.className = 'chat-online-item';
-        item.style.cursor = isMe ? 'default' : 'pointer';
-        item.title = isMe ? '' : `Click to message ${u.name} privately`;
-        item.innerHTML = `
-            <div class="chat-user-avatar-sm" style="width:28px;height:28px;background:${u.avatarColor};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:800;color:#fff;flex-shrink:0">${getInitials(u.name)}</div>
-            <span class="chat-online-name${isMe?' me':''}">${u.name}${isMe?' (you)':''}</span>
-            ${!isMe ? `<button onclick="inititateDM('${u.name}')" title="Private message" style="background:rgba(244,114,182,.15);border:1.5px solid rgba(244,114,182,.28);border-radius:8px;padding:3px 8px;color:#fbcfe8;font-size:.68rem;font-weight:700;cursor:pointer;transition:all .2s;font-family:'Plus Jakarta Sans',sans-serif;white-space:nowrap;margin-left:auto" onmouseover="this.style.background='rgba(244,114,182,.28)'" onmouseout="this.style.background='rgba(244,114,182,.15)'"><i class="fas fa-lock"></i> DM</button>` : ''}`;
+// ── Online list (real users) ───────────────────────
+function renderOnlineList(){
+    const list=document.getElementById('onlineList');
+    list.innerHTML='';
+    const users=chatState.onlineUsers||[];
+    users.forEach(u=>{
+        const isMe=chatState.user&&u.uid===chatState.user.uid;
+        const item=document.createElement('div');
+        item.className='chat-online-item';
+        item.innerHTML=`
+            <div class="chat-user-avatar-sm" style="width:28px;height:28px;background:${u.avatarColor||getAvatarColor(u.name)};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:800;color:#fff;flex-shrink:0">${getInitials(u.name)}</div>
+            <span class="chat-online-name${isMe?' me':''}">${escapeHtml(u.name)}${isMe?' (you)':''}</span>
+            ${!isMe?`<button onclick="inititateDM('${u.uid}','${u.name}')" style="background:rgba(244,114,182,.15);border:1.5px solid rgba(244,114,182,.28);border-radius:8px;padding:3px 8px;color:#fbcfe8;font-size:.68rem;font-weight:700;cursor:pointer;margin-left:auto;font-family:'Plus Jakarta Sans',sans-serif" onmouseover="this.style.background='rgba(244,114,182,.28)'" onmouseout="this.style.background='rgba(244,114,182,.15)'"><i class="fas fa-lock"></i> DM</button>`:''}`;
         list.appendChild(item);
     });
 }
 
-// ── PRIVATE MESSAGING ────────────────────────────────
-// chatState.dms = { 'username': { messages:[], unread:0, accepted:bool } }
-// chatState.activePM = null  (username currently open in PM window)
-// chatState.pendingDMFrom = null (incoming request waiting)
-
-function inititateDM(targetName) {
-    if(!chatState.user) return;
-    if(targetName === chatState.user.name) return;
-
-    // Already have a thread → open it directly
-    if(chatState.dms[targetName]) {
-        openPM(targetName);
-        return;
-    }
-
-    // Create thread and simulate "sending a request" to them
-    chatState.dms[targetName] = { messages:[], unread:0, accepted:false };
-
-    // Add opening system message
-    chatState.dms[targetName].messages.push({
-        type:'system',
-        text:`You sent a private message request to ${targetName}. Waiting for them to accept…`,
-        ts: Date.now()
+function updateRoomCounts(){
+    // For simplicity: show current room's count everywhere
+    const cnt=chatState.onlineUsers.length||0;
+    Object.keys(CHAT_ROOMS).forEach(r=>{
+        const el=document.getElementById(`cnt-${r}`);
+        if(el) el.textContent=r===chatState.room?cnt:'';
     });
-
-    // Simulate the other person accepting after 2-4 seconds
-    const delay = 2000 + Math.random() * 2000;
-    setTimeout(() => {
-        if(!chatState.dms[targetName]) return;
-        chatState.dms[targetName].accepted = true;
-        chatState.dms[targetName].messages.push({
-            type:'system',
-            text:`${targetName} accepted your request. You can now chat privately! 🔒`,
-            ts: Date.now()
-        });
-        // Bot sends a greeting
-        setTimeout(() => {
-            if(!chatState.dms[targetName]) return;
-            const greetings = [
-                `Hey! Happy to chat privately 😊`,
-                `Hi there! What's on your mind? 💙`,
-                `Hello! Nice to connect 🌿`,
-                `Hey, good to hear from you ✨`
-            ];
-            const greeting = greetings[Math.floor(Math.random()*greetings.length)];
-            chatState.dms[targetName].messages.push({
-                type:'user', from:targetName, text:greeting,
-                ts:Date.now(), isMe:false,
-                avatarColor: getAvatarColor(targetName)
-            });
-            if(chatState.activePM === targetName) {
-                renderPMMessages(targetName);
-            } else {
-                chatState.dms[targetName].unread++;
-                updateDMBadges();
-            }
-            renderDMList();
-        }, 1200);
-
-        renderDMList();
-        if(chatState.activePM === targetName) renderPMMessages(targetName);
-    }, delay);
-
-    // Switch to DMs tab and open window
-    switchSidebarTab('dms');
-    renderDMList();
-    openPM(targetName);
 }
 
-function openPM(targetName) {
-    chatState.activePM = targetName;
-    const dm = chatState.dms[targetName];
-    if(!dm) return;
+// ── Private Messaging (real Firebase) ─────────────
+function inititateDM(targetUid,targetName){
+    if(!chatState.user||targetUid===chatState.user.uid) return;
+    const threadId=dmThreadId(chatState.user.uid,targetUid);
+    waitForFirebase(async fb=>{
+        const {db,doc,setDoc,serverTimestamp}=fb;
+        // Create or ensure thread doc
+        const threadRef=doc(db,'dms',threadId);
+        await setDoc(threadRef,{
+            participants:[chatState.user.uid,targetUid],
+            participantNames:{[chatState.user.uid]:chatState.user.name,[targetUid]:targetName},
+            createdAt:serverTimestamp(),
+            status:'pending',
+            requestFrom:chatState.user.uid
+        },{merge:true}).catch(()=>{});
+        // Send a DM-request notification to the target
+        const notifRef=doc(db,'dmRequests',`${threadId}_${targetUid}`);
+        await setDoc(notifRef,{
+            threadId, toUid:targetUid, toName:targetName,
+            fromUid:chatState.user.uid, fromName:chatState.user.name,
+            fromAvatar:chatState.user.avatarColor, ts:serverTimestamp(), status:'pending'
+        }).catch(()=>{});
+        // Open PM window for sender
+        if(!chatState.dms[threadId]){
+            chatState.dms[threadId]={ messages:[], unread:0, otherName:targetName, threadId };
+        }
+        switchSidebarTab('dms');
+        openPM(threadId,targetName,targetUid);
+    });
+}
 
-    // Reset unread
-    dm.unread = 0;
+function openPM(threadId,otherName,otherUid){
+    chatState.activePM=threadId;
+    const dm=chatState.dms[threadId]||(chatState.dms[threadId]={messages:[],unread:0,otherName,threadId});
+    dm.unread=0;
     updateDMBadges();
     renderDMList();
 
-    // Update PM window header
-    const av = document.getElementById('pmWithAvatar');
-    av.textContent = getInitials(targetName);
-    av.style.background = getAvatarColor(targetName);
-    document.getElementById('pmWithName').textContent = targetName;
-
-    // Show window
+    const av=document.getElementById('pmWithAvatar');
+    av.textContent=getInitials(otherName);
+    av.style.background=getAvatarColor(otherName);
+    document.getElementById('pmWithName').textContent=otherName;
     document.getElementById('pmWindow').classList.add('open');
-    renderPMMessages(targetName);
-    scrollPMToBottom();
 
-    // Wire PM textarea
-    const ta = document.getElementById('pmTextarea');
-    ta.onkeydown = function(e) {
-        if(e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendPM(); }
-    };
-    ta.oninput = function() {
-        this.style.height = 'auto';
-        this.style.height = Math.min(this.scrollHeight,100)+'px';
-    };
-    ta.focus();
+    // Subscribe to this DM thread messages
+    if(chatState.unsubPMThread){ chatState.unsubPMThread(); chatState.unsubPMThread=null; }
+    waitForFirebase(fb=>{
+        const {db,collection,query,orderBy,onSnapshot}=fb;
+        const q=query(collection(db,`dms/${threadId}/messages`),orderBy('ts','asc'));
+        chatState.unsubPMThread=onSnapshot(q,snap=>{
+            const msgs=snap.docs.map(d=>({id:d.id,...d.data()}));
+            chatState.dms[threadId].messages=msgs;
+            if(chatState.activePM===threadId){
+                renderPMMessages(threadId);
+                scrollPMToBottom();
+            } else {
+                chatState.dms[threadId].unread=msgs.filter(m=>m.fromUid!==chatState.user.uid&&!m._seen).length;
+                updateDMBadges();
+                renderDMList();
+            }
+        });
+    });
+
+    // Wire textarea
+    const ta=document.getElementById('pmTextarea');
+    ta.value=''; ta.style.height='auto'; ta.focus();
+    const newTa=ta.cloneNode(true);
+    ta.parentNode.replaceChild(newTa,ta);
+    newTa.onkeydown=e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendPM();} };
+    newTa.oninput=function(){ this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,100)+'px'; };
 }
 
-function closePM() {
-    chatState.activePM = null;
+function closePM(){
+    chatState.activePM=null;
+    if(chatState.unsubPMThread){ chatState.unsubPMThread(); chatState.unsubPMThread=null; }
     document.getElementById('pmWindow').classList.remove('open');
     renderDMList();
 }
 
-function sendPM() {
-    const target = chatState.activePM;
-    if(!target || !chatState.user) return;
-    const ta = document.getElementById('pmTextarea');
-    const text = ta.value.trim();
+async function sendPM(){
+    const threadId=chatState.activePM;
+    if(!threadId||!chatState.user) return;
+    const ta=document.getElementById('pmTextarea');
+    const text=ta.value.trim();
     if(!text) return;
-
-    if(!chatState.dms[target]) chatState.dms[target] = {messages:[],unread:0,accepted:true};
-    chatState.dms[target].messages.push({
-        type:'user', from:chatState.user.name, text,
-        ts:Date.now(), isMe:true,
-        avatarColor: chatState.user.avatarColor
+    ta.value=''; ta.style.height='auto';
+    waitForFirebase(async fb=>{
+        const {db,collection,addDoc,serverTimestamp,doc,updateDoc}=fb;
+        await addDoc(collection(db,`dms/${threadId}/messages`),{
+            text, fromUid:chatState.user.uid, fromName:chatState.user.name,
+            avatarColor:chatState.user.avatarColor, ts:serverTimestamp()
+        }).catch(e=>console.error('PM send failed:',e));
+        // Mark thread as accepted/active
+        await updateDoc(doc(db,'dms',threadId),{status:'active'}).catch(()=>{});
     });
-    ta.value = '';
-    ta.style.height = 'auto';
-    renderPMMessages(target);
-    scrollPMToBottom();
-    renderDMList();
-
-    // Simulate bot reply after 1.5-3s if accepted
-    if(chatState.dms[target] && chatState.dms[target].accepted) {
-        const pmTyping = document.getElementById('pmTyping');
-        pmTyping.innerHTML = `<div class="typing-dots"><span></span><span></span><span></span></div>&nbsp;${target} is typing…`;
-        const delay = 1500 + Math.random()*1500;
-        setTimeout(() => {
-            if(!chatState.dms[target]) return;
-            pmTyping.textContent = '';
-            const replies = [
-                "I really understand what you mean 💙",
-                "That's really helpful, thank you for sharing ✨",
-                "I've been thinking about that too 🌿",
-                "How long have you been feeling this way?",
-                "You're not alone in feeling like that 🤗",
-                "That takes real courage to share, thank you 🌸",
-                "I appreciate you opening up about this 💞",
-                "Have you talked to anyone else about this?",
-                "That resonates with me deeply 💫",
-                "I'm here for you, take your time 🕊️"
-            ];
-            const reply = replies[Math.floor(Math.random()*replies.length)];
-            chatState.dms[target].messages.push({
-                type:'user', from:target, text:reply,
-                ts:Date.now(), isMe:false,
-                avatarColor: getAvatarColor(target)
-            });
-            if(chatState.activePM === target) {
-                renderPMMessages(target);
-                scrollPMToBottom();
-            } else {
-                chatState.dms[target].unread++;
-                updateDMBadges();
-            }
-            renderDMList();
-        }, delay);
-    }
 }
 
-function renderPMMessages(targetName) {
-    const container = document.getElementById('pmMessages');
-    const dm = chatState.dms[targetName];
-    if(!dm) return;
-    container.innerHTML = '';
-
-    dm.messages.forEach(msg => {
-        if(msg.type === 'system') {
-            const d = document.createElement('div');
-            d.className = 'pm-sys-msg';
-            d.textContent = msg.text;
-            container.appendChild(d);
-            return;
-        }
-        const isMe = msg.isMe;
-        const g = document.createElement('div');
-        g.className = `pm-msg-group ${isMe?'pm-mine':'pm-theirs'}`;
-        g.innerHTML = `
+function renderPMMessages(threadId){
+    const container=document.getElementById('pmMessages');
+    const dm=chatState.dms[threadId];
+    if(!dm){container.innerHTML='';return;}
+    const wasAtBottom=container.scrollHeight-container.scrollTop-container.clientHeight<60;
+    container.innerHTML='';
+    dm.messages.forEach(msg=>{
+        const isMe=chatState.user&&msg.fromUid===chatState.user.uid;
+        const g=document.createElement('div');
+        g.className=`pm-msg-group ${isMe?'pm-mine':'pm-theirs'}`;
+        g.innerHTML=`
             <div class="pm-msg-meta">
-                <div class="pm-with-avatar" style="width:26px;height:26px;background:${msg.avatarColor};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:800;color:#fff">${getInitials(msg.from)}</div>
-                <span style="font-weight:700;color:var(--muted)">${isMe?'You':msg.from}</span>
+                <div style="width:26px;height:26px;background:${msg.avatarColor||getAvatarColor(msg.fromName)};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:800;color:#fff;flex-shrink:0">${getInitials(msg.fromName)}</div>
+                <span style="font-weight:700;color:var(--muted)">${isMe?'You':escapeHtml(msg.fromName)}</span>
                 <span style="color:var(--faint)">${formatTime(msg.ts)}</span>
             </div>
             <div class="pm-bubble">${escapeHtml(msg.text)}</div>`;
         container.appendChild(g);
     });
+    if(wasAtBottom) scrollPMToBottom();
 }
 
-function scrollPMToBottom() {
-    const c = document.getElementById('pmMessages');
-    if(c) c.scrollTop = c.scrollHeight;
+function scrollPMToBottom(){ const c=document.getElementById('pmMessages'); if(c) c.scrollTop=c.scrollHeight; }
+
+// ── DM inbox (incoming requests) ──────────────────
+function subscribeDMInbox(fb){
+    const {db,collection,query,where,onSnapshot,doc,deleteDoc}=fb;
+    if(chatState.unsubDMInbox){ chatState.unsubDMInbox(); }
+    const uid=chatState.user.uid;
+    const q=query(collection(db,'dmRequests'),where('toUid','==',uid),where('status','==','pending'));
+    chatState.unsubDMInbox=onSnapshot(q,snap=>{
+        snap.docChanges().forEach(change=>{
+            if(change.type==='added'){
+                const req=change.doc.data();
+                showDMRequestToast(req,change.doc.id);
+            }
+        });
+    });
 }
 
-function renderDMList() {
-    const list = document.getElementById('dmList');
-    const dms = chatState.dms || {};
-    const keys = Object.keys(dms);
+function showDMRequestToast(req,docId){
+    const toast=document.getElementById('dmRequestToast');
+    const av=document.getElementById('dmToastAvatar');
+    av.textContent=getInitials(req.fromName);
+    av.style.background=req.fromAvatar||getAvatarColor(req.fromName);
+    document.getElementById('dmToastTitle').textContent=req.fromName;
+    document.getElementById('dmToastSub').textContent='wants to chat with you privately 💌';
+    document.getElementById('dmToastAccept').onclick=()=>acceptDMRequest(req,docId);
+    toast.classList.add('show');
+    setTimeout(()=>toast.classList.remove('show'),15000);
+}
 
-    if(keys.length === 0) {
-        list.innerHTML = `<div class="dm-empty"><span class="dm-empty-icon">💌</span>No private chats yet.<br>Click a user's name in the Room tab to start a private conversation.</div>`;
+function acceptDMRequest(req,docId){
+    document.getElementById('dmRequestToast').classList.remove('show');
+    waitForFirebase(async fb=>{
+        const {db,doc,updateDoc,deleteDoc}=fb;
+        // Mark request handled
+        await deleteDoc(doc(db,'dmRequests',docId)).catch(()=>{});
+        // Update thread status
+        await updateDoc(doc(db,'dms',req.threadId),{status:'active'}).catch(()=>{});
+        // Open the PM window
+        if(!chatState.dms[req.threadId]){
+            chatState.dms[req.threadId]={messages:[],unread:0,otherName:req.fromName,threadId:req.threadId};
+        }
+        switchSidebarTab('dms');
+        openPM(req.threadId,req.fromName,req.fromUid);
+    });
+}
+
+function declineDMRequest(){
+    document.getElementById('dmRequestToast').classList.remove('show');
+}
+
+function renderDMList(){
+    const list=document.getElementById('dmList');
+    const dms=chatState.dms||{};
+    const keys=Object.keys(dms);
+    if(keys.length===0){
+        list.innerHTML=`<div class="dm-empty"><span class="dm-empty-icon">💌</span>No private chats yet.<br>Click the DM button next to any online user to start.</div>`;
         return;
     }
-
-    list.innerHTML = '';
-    keys.forEach(name => {
-        const dm = dms[name];
-        const lastMsg = dm.messages.filter(m=>m.type==='user').slice(-1)[0];
-        const preview = lastMsg ? lastMsg.text.slice(0,30)+(lastMsg.text.length>30?'…':'') : (dm.accepted?'No messages yet':'Request pending…');
-        const item = document.createElement('div');
-        item.className = `dm-item${chatState.activePM===name?' active-dm':''}`;
-        item.onclick = () => openPM(name);
-        item.innerHTML = `
-            <div class="dm-avatar" style="background:${getAvatarColor(name)}">
-                ${getInitials(name)}
-                <div class="dm-status-dot${!dm.accepted?' away':''}"></div>
+    list.innerHTML='';
+    keys.forEach(threadId=>{
+        const dm=dms[threadId];
+        const msgs=dm.messages||[];
+        const lastMsg=msgs[msgs.length-1];
+        const preview=lastMsg?lastMsg.text.slice(0,30)+(lastMsg.text.length>30?'…':''):'No messages yet';
+        const item=document.createElement('div');
+        item.className=`dm-item${chatState.activePM===threadId?' active-dm':''}`;
+        item.onclick=()=>openPM(threadId,dm.otherName);
+        item.innerHTML=`
+            <div class="dm-avatar" style="background:${getAvatarColor(dm.otherName)}">
+                ${getInitials(dm.otherName)}
+                <div class="dm-status-dot"></div>
             </div>
             <div class="dm-info">
-                <div class="dm-name">${name}</div>
+                <div class="dm-name">${escapeHtml(dm.otherName)}</div>
                 <div class="dm-preview">${escapeHtml(preview)}</div>
             </div>
             <div class="dm-meta">
@@ -3374,266 +3359,79 @@ function renderDMList() {
     });
 }
 
-function updateDMBadges() {
-    const total = Object.values(chatState.dms||{}).reduce((s,d)=>s+d.unread,0);
-    const badge = document.getElementById('dmBadge');
-    if(total > 0) {
-        badge.textContent = total > 9 ? '9+' : total;
-        badge.style.display = 'inline-flex';
-    } else {
-        badge.style.display = 'none';
-    }
+function updateDMBadges(){
+    const total=Object.values(chatState.dms||{}).reduce((s,d)=>s+(d.unread||0),0);
+    const badge=document.getElementById('dmBadge');
+    if(total>0){ badge.textContent=total>9?'9+':total; badge.style.display='inline-flex'; }
+    else badge.style.display='none';
 }
 
-// Incoming DM request simulation (a bot pings you)
-function simulateIncomingDMRequest() {
-    if(!chatState.user) return;
-    const room = chatState.room;
-    const bots = (chatState.onlineUsers[room]||[]).filter(u=>u.isBot && !chatState.dms[u.name]);
-    if(bots.length === 0) return;
-    const bot = bots[Math.floor(Math.random()*bots.length)];
-    chatState.pendingDMFrom = bot.name;
-
-    const toast = document.getElementById('dmRequestToast');
-    const toastAvatar = document.getElementById('dmToastAvatar');
-    toastAvatar.textContent = getInitials(bot.name);
-    toastAvatar.style.background = getAvatarColor(bot.name);
-    document.getElementById('dmToastTitle').textContent = bot.name;
-    document.getElementById('dmToastSub').textContent = 'wants to chat with you privately 💌';
-    document.getElementById('dmToastAccept').onclick = () => acceptDMRequest(bot.name);
-    toast.classList.add('show');
-    // Auto-dismiss after 12s
-    setTimeout(() => toast.classList.remove('show'), 12000);
-}
-
-function acceptDMRequest(fromName) {
-    document.getElementById('dmRequestToast').classList.remove('show');
-    if(!chatState.dms[fromName]) {
-        chatState.dms[fromName] = { messages:[], unread:0, accepted:true };
-    }
-    chatState.dms[fromName].accepted = true;
-    chatState.dms[fromName].messages.push({
-        type:'system',
-        text:`${fromName} started a private conversation with you 🔒`,
-        ts:Date.now()
-    });
-    // Bot sends first message
-    const openers = [
-        `Hey! I noticed you in the room and wanted to connect 💙`,
-        `Hi! Hope you don't mind me reaching out privately 🌿`,
-        `Hello! I resonated with what you shared in the room ✨`,
-        `Hey there! Just wanted to check in on you 🤗`
-    ];
-    chatState.dms[fromName].messages.push({
-        type:'user', from:fromName,
-        text: openers[Math.floor(Math.random()*openers.length)],
-        ts:Date.now(), isMe:false,
-        avatarColor: getAvatarColor(fromName)
-    });
-    chatState.dms[fromName].unread = 1;
-    updateDMBadges();
-    renderDMList();
-    switchSidebarTab('dms');
-    openPM(fromName);
-}
-
-function declineDMRequest() {
-    document.getElementById('dmRequestToast').classList.remove('show');
-    chatState.pendingDMFrom = null;
-}
-
-function switchSidebarTab(tab) {
-    document.getElementById('tabUsers').classList.toggle('active', tab==='users');
-    document.getElementById('tabDMs').classList.toggle('active', tab==='dms');
-    document.getElementById('paneUsers').classList.toggle('active', tab==='users');
-    document.getElementById('paneDMs').classList.toggle('active', tab==='dms');
+function switchSidebarTab(tab){
+    document.getElementById('tabUsers').classList.toggle('active',tab==='users');
+    document.getElementById('tabDMs').classList.toggle('active',tab==='dms');
+    document.getElementById('paneUsers').classList.toggle('active',tab==='users');
+    document.getElementById('paneDMs').classList.toggle('active',tab==='dms');
     if(tab==='dms') renderDMList();
 }
 
-function updateRoomCounts() {
-    Object.keys(CHAT_ROOMS).forEach(room => {
-        const cnt = document.getElementById(`cnt-${room}`);
-        if(cnt) cnt.textContent = (chatState.onlineUsers[room]||[]).length;
-    });
-}
-
-// ── REACTIONS ────────────────────────────────────────
-function addReaction(msgId, emoji) {
-    const msgs = chatState.messages[chatState.room] || [];
-    const msg = msgs.find(m => String(m.id) === String(msgId));
-    if(!msg) return;
-    if(!msg.reactions) msg.reactions = {};
-    msg.reactions[emoji] = (msg.reactions[emoji]||0) + 1;
-    renderMessages();
-    scrollToBottom();
-}
-
-// ── ROOM SWITCH ──────────────────────────────────────
-function switchRoom(btn) {
-    const room = btn.dataset.room;
-    chatState.room = room;
-    document.querySelectorAll('.chat-room-switch-btn').forEach(b=>b.classList.remove('active-room'));
-    btn.classList.add('active-room');
-    const rm = CHAT_ROOMS[room];
-    document.getElementById('chatRoomName').textContent = `${rm.icon} ${rm.name}`;
-    renderMessages();
-    renderOnlineList();
-    scrollToBottom();
-    document.getElementById('aiSuggestions').classList.remove('visible');
-}
-
-// ── TYPING ────────────────────────────────────────────
-function handleTypingInput() {
+// ── Typing indicator ───────────────────────────────
+function handleTypingInput(){
     clearTimeout(chatState.typingTimeout);
-    chatState.typingTimeout = setTimeout(()=>{
-        document.getElementById('typingIndicator').textContent='';
-    }, 2000);
+    chatState.typingTimeout=setTimeout(()=>{ document.getElementById('typingIndicator').textContent=''; },2000);
 }
 
-function showTyping(name) {
-    const indicator = document.getElementById('typingIndicator');
-    indicator.innerHTML = `<div class="typing-dots"><span></span><span></span><span></span></div> <span style="color:var(--text2);font-weight:600">${name}</span> is typing…`;
-    setTimeout(()=>{
-        if(indicator.textContent.includes(name)) indicator.textContent='';
-    }, 3000);
-}
-
-// ── EMOJI PICKER ─────────────────────────────────────
-function populateEmojiPicker() {
-    const picker = document.getElementById('emojiPicker');
-    picker.innerHTML = '';
-    EMOJIS.forEach(e => {
-        const span = document.createElement('span');
-        span.className = 'ep-emoji';
-        span.textContent = e;
-        span.onclick = () => {
-            const ta = document.getElementById('chatTextarea');
-            ta.value += e;
-            ta.focus();
-            toggleEmoji();
-        };
+// ── Emoji picker ───────────────────────────────────
+function populateEmojiPicker(){
+    const picker=document.getElementById('emojiPicker');
+    picker.innerHTML='';
+    EMOJIS.forEach(e=>{
+        const span=document.createElement('span');
+        span.className='ep-emoji'; span.textContent=e;
+        span.onclick=()=>{ const ta=document.getElementById('chatTextarea'); ta.value+=e; ta.focus(); toggleEmoji(); };
         picker.appendChild(span);
     });
 }
-
-function toggleEmoji() {
-    const picker = document.getElementById('emojiPicker');
-    chatState.emojiOpen = !chatState.emojiOpen;
-    picker.classList.toggle('open', chatState.emojiOpen);
-    document.onclick = chatState.emojiOpen ? function(e) {
-        if(!picker.contains(e.target) && !e.target.classList.contains('chat-emoji-btn')) {
-            chatState.emojiOpen = false;
-            picker.classList.remove('open');
-            document.onclick = null;
-        }
-    } : null;
+function toggleEmoji(){
+    const picker=document.getElementById('emojiPicker');
+    chatState.emojiOpen=!chatState.emojiOpen;
+    picker.classList.toggle('open',chatState.emojiOpen);
+    if(chatState.emojiOpen){
+        setTimeout(()=>{ document.addEventListener('click',function h(e){ if(!picker.contains(e.target)&&!e.target.classList.contains('chat-emoji-btn')){ chatState.emojiOpen=false; picker.classList.remove('open'); document.removeEventListener('click',h); } }); },0);
+    }
 }
 
-// ── AI SUGGESTIONS (Claude API) ──────────────────────
-async function getAISuggestions() {
+// ── AI Suggestions ─────────────────────────────────
+async function getAISuggestions(){
     if(chatState.aiLoading) return;
-    const room = CHAT_ROOMS[chatState.room];
-    const recentMsgs = (chatState.messages[chatState.room]||[])
-        .filter(m=>m.type==='user')
-        .slice(-5)
-        .map(m=>`${m.name}: ${m.text}`)
-        .join('\n');
-
-    if(!recentMsgs) {
-        showSuggestions(['Share how you\'re feeling today 💙','What brings you here today? 🌿','How is everyone doing? ✨']);
-        return;
-    }
-
-    chatState.aiLoading = true;
-    const btn = document.querySelector('.chat-ai-btn');
-    btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Thinking…';
-    btn.disabled = true;
-
-    try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({
-                model:'claude-sonnet-4-20250514',
-                max_tokens:200,
-                system:`You are a warm, empathetic assistant helping people in a mental wellness chat room called "${room.name}" (${room.icon}). Generate exactly 3 short, supportive reply suggestions based on the recent conversation. Each suggestion should be 1-2 sentences, warm and non-clinical. Output ONLY a JSON array of 3 strings, nothing else. Example: ["suggestion1","suggestion2","suggestion3"]`,
-                messages:[{role:'user',content:`Recent chat:\n${recentMsgs}\n\nGenerate 3 warm reply suggestions for a user joining this conversation.`}]
-            })
+    const room=CHAT_ROOMS[chatState.room];
+    const msgs=(chatState.roomMessages[chatState.room]||[]).filter(m=>m.type==='user').slice(-5).map(m=>`${m.name}: ${m.text}`).join('\n');
+    if(!msgs){ showSuggestions(['Share how you\'re feeling today 💙','What brings you here? 🌿','How is everyone doing? ✨']); return; }
+    chatState.aiLoading=true;
+    const btn=document.querySelector('.chat-ai-btn');
+    btn.innerHTML='<i class="fas fa-circle-notch fa-spin"></i> Thinking…'; btn.disabled=true;
+    try{
+        const res=await fetch('https://api.anthropic.com/v1/messages',{
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:200,
+                system:`You are warm and empathetic, in a wellness room called "${room.name}". Generate exactly 3 short supportive reply suggestions. Output ONLY a JSON array of 3 strings.`,
+                messages:[{role:'user',content:`Recent chat:\n${msgs}\n\nGenerate 3 warm reply suggestions.`}]})
         });
-        const data = await response.json();
-        const raw = data.content?.[0]?.text||'[]';
-        const clean = raw.replace(/```json|```/g,'').trim();
-        const suggestions = JSON.parse(clean);
+        const data=await res.json();
+        const suggestions=JSON.parse((data.content?.[0]?.text||'[]').replace(/```json|```/g,'').trim());
         showSuggestions(suggestions.slice(0,3));
-    } catch(e) {
-        // Fallback suggestions
-        const fallbacks = {
-            anxiety:       ['I really relate to that feeling 🌿','Breathing slowly is helping me right now 💙','Thank you for sharing — you\'re not alone ✨'],
-            relationships: ['That takes real courage to share 💞','Communication really is everything 💙','Sending you so much warmth 🌸'],
-            mood:          ['Your feelings are completely valid 🌈','Small steps still count 💪','I\'m here with you in this 💙'],
-            general:       ['So glad you\'re here ☕','This community really helps 🌿','Thank you for sharing 💙']
-        };
-        showSuggestions(fallbacks[chatState.room] || fallbacks.general);
-    } finally {
-        chatState.aiLoading = false;
-        btn.innerHTML = '<i class="fas fa-magic"></i> Ideas';
-        btn.disabled = false;
+    }catch(e){
+        const fb={anxiety:['I really relate to that feeling 🌿','You\'re not alone ✨','Breathing slowly helps me 💙'],relationships:['That takes real courage to share 💞','Communication is everything 💙','Sending warmth 🌸'],mood:['Your feelings are valid 🌈','Small steps count 💪','I\'m here with you 💙'],general:['So glad you\'re here ☕','This community helps 🌿','Thank you for sharing 💙']};
+        showSuggestions(fb[chatState.room]||fb.general);
+    }finally{
+        chatState.aiLoading=false;
+        btn.innerHTML='<i class="fas fa-magic"></i> Ideas'; btn.disabled=false;
     }
 }
-
-function showSuggestions(suggestions) {
-    const panel = document.getElementById('aiSuggestions');
-    panel.innerHTML = `<span class="ai-suggest-label"><i class="fas fa-robot"></i> AI Ideas</span>`;
-    suggestions.forEach(s => {
-        const chip = document.createElement('span');
-        chip.className = 'ai-suggest-chip';
-        chip.textContent = s;
-        chip.onclick = () => {
-            document.getElementById('chatTextarea').value = s;
-            document.getElementById('chatTextarea').focus();
-            panel.classList.remove('visible');
-        };
-        panel.appendChild(chip);
-    });
+function showSuggestions(suggestions){
+    const panel=document.getElementById('aiSuggestions');
+    panel.innerHTML=`<span class="ai-suggest-label"><i class="fas fa-robot"></i> AI Ideas</span>`;
+    suggestions.forEach(s=>{ const c=document.createElement('span'); c.className='ai-suggest-chip'; c.textContent=s; c.onclick=()=>{ document.getElementById('chatTextarea').value=s; document.getElementById('chatTextarea').focus(); panel.classList.remove('visible'); }; panel.appendChild(c); });
     panel.classList.add('visible');
-}
-
-// ── BOT ACTIVITY (simulated liveness) ────────────────
-function startBotActivity() {
-    chatState.botInterval = setInterval(() => {
-        if(!chatState.user) return;
-        const room = chatState.room;
-        const bots = (chatState.onlineUsers[room]||[]).filter(u=>u.isBot);
-        if(bots.length === 0) return;
-        // 30% chance a bot posts
-        if(Math.random() > 0.30) return;
-        const bot = bots[Math.floor(Math.random()*bots.length)];
-        const msgs = BOT_MESSAGES[room] || BOT_MESSAGES.general;
-        const msg = msgs[Math.floor(Math.random()*msgs.length)];
-        // Show typing first
-        showTyping(bot.name);
-        setTimeout(() => {
-            addUserMessage(bot.name, msg, room, false);
-            if(chatState.room === room) {
-                renderMessages();
-                scrollToBottom();
-            }
-        }, 2000 + Math.random()*1500);
-    }, 18000 + Math.random()*12000); // every 18-30s
-}
-
-function startChatPolling() {
-    chatState.pollInterval = setInterval(() => {
-        if(!chatState.user) return;
-        renderMessages();
-        renderOnlineList();
-        updateRoomCounts();
-    }, 3000);
-}
-
-function stopChatPolling() {
-    if(chatState.pollInterval) { clearInterval(chatState.pollInterval); chatState.pollInterval=null; }
-    if(chatState.botInterval)  { clearInterval(chatState.botInterval);  chatState.botInterval=null;  }
 }
 </script>
 </body>
