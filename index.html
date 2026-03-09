@@ -437,8 +437,14 @@ tr:hover td{background:rgba(123,104,238,.08);color:var(--text)}
 .nav-chat-btn:hover{background:linear-gradient(135deg,rgba(244,114,182,.35),rgba(123,104,238,.28));border-color:rgba(244,114,182,.55);transform:translateY(-1px);box-shadow:0 6px 20px rgba(244,114,182,.25)}
 
 /* ── CHATROOM PAGE ─────────────────────────────────── */
-#chat{display:none;min-height:100vh;background:var(--ink);flex-direction:column}
+#chat{display:none;min-height:100vh;background:var(--ink);flex-direction:column;position:relative;z-index:1000}
 #chat.active{display:flex}
+
+/* Fix for marquee overlap - hide side panels when chat is active */
+body:has(#chat.active) .side-panel,
+body:has(#chat.active) .float-card {
+    display: none !important;
+}
 
 /* Login screen */
 .chat-login{flex:1;display:flex;align-items:center;justify-content:center;padding:40px 24px;position:relative;overflow:hidden}
@@ -1404,8 +1410,6 @@ tr:hover td{background:rgba(123,104,238,.08);color:var(--text)}
 //  SCALES DATABASE
 // ═══════════════════════════════════════════════════
 const scales = {
-
-    // ── MOOD, STRESS & ANXIETY ──────────────────────
     pss: {
         key:'pss', category:'mood',
         title:"Perceived Stress Scale (PSS-10)",
@@ -1431,7 +1435,6 @@ const scales = {
             return{severity:"High Stress",level:"severe",description:"High levels of perceived stress. Professional support may be very beneficial.",recommendations:["Seek professional counselling","Practice daily stress-reduction techniques","Consider lifestyle changes","Build a strong support network"]};
         }
     },
-
     gad7:{
         key:'gad7', category:'mood',
         title:"GAD-7 Anxiety Scale",
@@ -1454,7 +1457,6 @@ const scales = {
             return{severity:"Severe Anxiety",level:"severe",description:"Severe anxiety symptoms. Professional assessment is strongly recommended.",recommendations:["Seek professional assessment immediately","Consider therapy or counselling","Discuss treatment options with healthcare provider","Develop a comprehensive treatment plan"]};
         }
     },
-
     phq9:{
         key:'phq9', category:'mood',
         title:"PHQ-9 Depression Scale",
@@ -1480,7 +1482,6 @@ const scales = {
             return{severity:"Severe Depression",level:"severe",description:"Severe depression symptoms. Urgent professional care is needed.",recommendations:["Seek immediate professional care","Consider intensive treatment","Involve support system","Safety assessment required"]};
         }
     },
-
     dass21:{
         key:'dass21', category:'mood',
         title:"DASS-21",
@@ -1524,7 +1525,6 @@ const scales = {
             return{severity:"DASS-21 Profile",level,description:`Depression: ${d} (${cl('depression',d)}) | Anxiety: ${a} (${cl('anxiety',a)}) | Stress: ${s} (${cl('stress',s)})`,recommendations:["Consider professional psychological evaluation","Practice daily stress management","Engage in regular physical activity","Seek social support and peer connection"]};
         }
     },
-
     k10:{
         key:'k10', category:'mood',
         title:"Kessler Psychological Distress Scale (K10)",
@@ -1550,7 +1550,6 @@ const scales = {
             return{severity:"Very High Distress",level:"severe",description:"Very high psychological distress. Immediate professional support is advised.",recommendations:["Seek immediate professional help","Consider comprehensive treatment","Regular monitoring and follow-up"]};
         }
     },
-
     epds:{
         key:'epds', category:'perinatal',
         title:"Edinburgh Postnatal Depression Scale (EPDS)",
@@ -1575,7 +1574,6 @@ const scales = {
             return{severity:"Probable Depression",level:"severe",description:"Score indicates probable postnatal depression. Prompt professional evaluation is needed.",recommendations:["Seek immediate professional help","Talk to GP or midwife urgently","Consider psychotherapy","Accept support from family and friends"]};
         }
     },
-
     audit:{
         key:'audit', category:'perinatal',
         title:"AUDIT – Alcohol Use Disorders Identification Test",
@@ -1601,58 +1599,39 @@ const scales = {
             return{severity:"Dependence Likely",level:"severe",description:"Score suggests possible alcohol dependence.",recommendations:["Seek immediate professional help","Consider a detoxification programme","Join a support group (e.g. AA)"]};
         }
     },
-
-    // ── SEXUAL HEALTH & INTIMACY ────────────────────
     fsfi:{
         key:'fsfi', category:'sexual',
         title:"FSFI – Female Sexual Function Index",
         description:"Assesses female sexual function across six domains: Desire, Arousal, Lubrication, Orgasm, Satisfaction, and Pain over the past 4 weeks. Each domain is weighted and scored to produce a total out of 36.",
         questions:[
-            // DESIRE (items 1-2, scored 1-5)
             "[Desire] How often did you feel sexual desire or interest?",
             "[Desire] How would you rate your level (intensity) of sexual desire or interest?",
-            // AROUSAL (items 3-6, scored 0-5)
             "[Arousal] How often did you feel sexually aroused during sexual activity or intercourse?",
             "[Arousal] How would you rate your level of sexual arousal during sexual activity or intercourse?",
             "[Arousal] How confident were you about becoming sexually aroused during sexual activity or intercourse?",
             "[Arousal] How often were you satisfied with your level of arousal during sexual activity or intercourse?",
-            // LUBRICATION (items 7-10, scored 0-5)
             "[Lubrication] How often did you become lubricated ('wet') during sexual activity or intercourse?",
             "[Lubrication] How difficult was it to become lubricated during sexual activity or intercourse?",
             "[Lubrication] How often did you maintain your lubrication until completion of sexual activity or intercourse?",
             "[Lubrication] How difficult was it to maintain your lubrication to completion of sexual activity or intercourse?",
-            // ORGASM (items 11-13, scored 0-5)
             "[Orgasm] When you had sexual stimulation or intercourse, how often did you reach orgasm (climax)?",
             "[Orgasm] When you had sexual stimulation or intercourse, how difficult was it to reach orgasm?",
             "[Orgasm] How satisfied were you with your ability to reach orgasm during sexual activity or intercourse?",
-            // SATISFACTION (items 14-16, scored 1-5)
             "[Satisfaction] How satisfied were you with the amount of emotional closeness during sex with your partner?",
             "[Satisfaction] How satisfied have you been with your sexual relationship with your partner?",
             "[Satisfaction] How satisfied have you been with your overall sex life?",
-            // PAIN (items 17-19, scored 0-5)
             "[Pain] How often did you experience discomfort or pain during vaginal penetration?",
             "[Pain] How often did you experience discomfort or pain following vaginal penetration?",
             "[Pain] How would you rate your level of discomfort or pain during or following vaginal penetration?"
         ],
-        // Domain-specific options are applied per group
-        // Desire (Q1-2): 1-5   Arousal/Lubric/Orgasm/Pain (Q3-19 except Satisfaction): 0-5   Satisfaction (Q14-16): 1-5
         maxScore:36, scoring:'domain-weighted',
-        // Use arousal options as the displayed options (0-5 most items)
         options:['No sexual activity / Not applicable (0)','Almost never / Never (1)','A few times — less than half (2)','Sometimes — about half the time (3)','Most times — more than half (4)','Almost always / Always (5)'],
-        // Custom score function: overrides calculateTotalScore
         customScore: function(responses) {
-            // responses = array of 19 values (0-indexed 0..18)
-            // Desire items 0,1: min 1, factor 0.6
             const desire = (responses[0] + responses[1]) * 0.6;
-            // Arousal items 2,3,4,5: factor 0.3
             const arousal = (responses[2] + responses[3] + responses[4] + responses[5]) * 0.3;
-            // Lubrication items 6,7,8,9: factor 0.3
             const lubric = (responses[6] + responses[7] + responses[8] + responses[9]) * 0.3;
-            // Orgasm items 10,11,12: factor 0.4
             const orgasm = (responses[10] + responses[11] + responses[12]) * 0.4;
-            // Satisfaction items 13,14,15: min 1, factor 0.4
             const satisf = (responses[13] + responses[14] + responses[15]) * 0.4;
-            // Pain items 16,17,18: factor 0.4
             const pain = (responses[16] + responses[17] + responses[18]) * 0.4;
             return parseFloat((desire + arousal + lubric + orgasm + satisf + pain).toFixed(1));
         },
@@ -1663,7 +1642,6 @@ const scales = {
             return{severity:"Severe Dysfunction",level:"severe",description:`Total FSFI Score: ${score}/36. Significant sexual dysfunction across multiple domains. Comprehensive evaluation is warranted.`,recommendations:["Seek specialist sexual health evaluation urgently","Consider multidisciplinary approach","Psychosexual therapy is recommended","Medical workup for hormonal and physiological factors"]};
         }
     },
-
     iief:{
         key:'iief', category:'sexual',
         title:"IIEF – International Index of Erectile Function",
@@ -1695,7 +1673,6 @@ const scales = {
             return{severity:"Severe ED",level:"severe",description:"Severe erectile dysfunction. Comprehensive medical and psychological evaluation is needed.",recommendations:["Urgent specialist referral","Comprehensive medical workup","Discuss all treatment options including medication and devices","Couples therapy if relationship impact is present"]};
         }
     },
-
     sfq:{
         key:'sfq', category:'sexual',
         title:"SFQ – Sexual Functioning Questionnaire",
@@ -1724,7 +1701,6 @@ const scales = {
             return{severity:"Poor Sexual Functioning",level:"severe",description:"Significant sexual dysfunction and dissatisfaction. Professional evaluation is recommended.",recommendations:["Specialist sexual health assessment","Comprehensive evaluation of physical and psychological factors","Intensive couples therapy","Medical treatment as appropriate"]};
         }
     },
-
     sast:{
         key:'sast', category:'sexual',
         title:"SAST – Sexual Addiction Screening Test",
@@ -1765,7 +1741,6 @@ const scales = {
             return{severity:"High Risk / Hypersexuality",level:"severe",description:"High-risk indicators for sexual addiction or hypersexuality. Professional intervention is recommended.",recommendations:["Seek specialist sexual addiction treatment","Intensive psychotherapy","Consider group-based recovery programmes","Address co-occurring mental health conditions"]};
         }
     },
-
     msq:{
         key:'msq', category:'sexual',
         title:"MSQ – Male Sexual Quotient",
@@ -1791,7 +1766,6 @@ const scales = {
             return{severity:"Significant Dysfunction",level:"severe",description:"Significant sexual dysfunction affecting quality of life.",recommendations:["Specialist evaluation required","Comprehensive medical workup","Discuss pharmacological and therapeutic options","Partner involvement recommended"]};
         }
     },
-
     sias:{
         key:'sias', category:'sexual',
         title:"SIAS – Sexual Inhibition & Excitation Scale (Short Form)",
@@ -1823,7 +1797,6 @@ const scales = {
             return{severity:`SES: ${ses}/30 | SIS: ${sis}/30`,level,description,recommendations:["Explore factors that influence your sexual arousal","Consider sex therapy if inhibition is causing distress","Communicate openly with your partner about needs and boundaries","Address anxiety or stress that may interfere with arousal"]};
         }
     },
-
     griss:{
         key:'griss', category:'sexual',
         title:"GRISS – Golombok-Rust Inventory of Sexual Satisfaction (Short Form)",
@@ -1849,8 +1822,6 @@ const scales = {
             return{severity:"Low Sexual Satisfaction",level:"severe",description:"Significant sexual dissatisfaction. Comprehensive evaluation is recommended.",recommendations:["Specialist relationship and sex therapy","Individual therapy for each partner","Medical evaluation for physical contributors","Structured communication exercises"]};
         }
     },
-
-    // ── AFFECT & EMOTION ────────────────────────────
     pades:{
         key:'pades', category:'affect',
         title:"PAD Emotion Scales",
@@ -1870,7 +1841,6 @@ const scales = {
             return{severity:"Emotional State",level:"low",description:`Pleasure: ${p}/5 (${pleasure}) | Arousal: ${a}/5 (${arousal}) | Dominance: ${d}/5 (${dominance})`,recommendations:["Practice emotional awareness and labelling","Develop emotion regulation skills","Consider emotional intelligence training","Reflect on how these states affect daily behaviour"]};
         }
     },
-
     poms:{
         key:'poms', category:'affect',
         title:"POMS – Profile of Mood States (Short Form)",
@@ -1886,7 +1856,6 @@ const scales = {
             return{severity:"Total Mood Disturbance",level,description:`TMD Score: ${tmd}/148 | Vigor: ${scores.vigor} | Tension: ${scores.tension} | Depression: ${scores.depression} | Anger: ${scores.anger} | Fatigue: ${scores.fatigue} | Confusion: ${scores.confusion}`,recommendations:["Monitor mood patterns weekly","Practice mood regulation techniques","Consider mindfulness-based interventions","Regular physical activity can boost vigour scores"]};
         }
     },
-
     panas:{
         key:'panas', category:'affect',
         title:"PANAS – Positive and Negative Affect Schedule",
@@ -1903,7 +1872,6 @@ const scales = {
             return{severity:"Affect Balance",level,description:`Positive Affect: ${pos}/50 | Negative Affect: ${neg}/50 | Affect Balance: ${bal>0?'+':''}${bal}`,recommendations:["Practice gratitude journaling","Develop positive thinking patterns","Use evidence-based strategies to manage negative emotions","Consider CBT techniques if negative affect is persistently high"]};
         }
     },
-
     spane:{
         key:'spane', category:'affect',
         title:"SPANE – Scale of Positive and Negative Experience",
@@ -1920,7 +1888,6 @@ const scales = {
             return{severity:"Experience Balance",level,description:`Positive Experience: ${pos}/30 | Negative Experience: ${neg}/30 | Balance (SPANE-B): ${bal>0?'+':''}${bal}`,recommendations:["Actively increase positive experiences","Identify and reduce sources of negative experience","Practice mindfulness and gratitude daily","Behavioural activation strategies can improve balance"]};
         }
     },
-
     maacl:{
         key:'maacl', category:'affect',
         title:"MAACL-R – Multiple Affect Adjective Checklist",
@@ -1936,8 +1903,6 @@ const scales = {
             return{severity:"Affect Profile",level,description:`Positive Affect: ${pos}/28 | Negative Affect: ${neg}/28 | P:N Ratio: ${ratio.toFixed(2)}`,recommendations:["Work on balancing positive and negative affect","Practice affect regulation strategies","Engage in mood-enhancing activities regularly","Consider talking therapy if negative affect dominates"]};
         }
     },
-
-    // ── ATHLETIC PERFORMANCE ────────────────────────
     brums:{
         key:'brums', category:'performance',
         title:"BRUMS – Brunel Mood Scale",
@@ -1981,7 +1946,6 @@ function showApp(presetCategory) {
     document.getElementById('landing').style.display = 'none';
     document.getElementById('app').style.display     = 'block';
     window.scrollTo(0, 0);
-    // Always re-populate the scale dropdown when entering app
     const catSel = document.getElementById('categorySelect');
     if (presetCategory) {
         catSel.value = presetCategory;
@@ -2005,7 +1969,6 @@ function filterScales() {
     document.getElementById('scaleDescBox').style.display = 'none';
 
     if (cat && categoryMeta[cat]) {
-        // Filtered: show only scales in this category
         categoryMeta[cat].keys.forEach(k => {
             if (!scales[k]) return;
             const opt = document.createElement('option');
@@ -2014,7 +1977,6 @@ function filterScales() {
             sel.appendChild(opt);
         });
     } else {
-        // No filter: show all grouped by category
         Object.entries(categoryMeta).forEach(([catKey, meta]) => {
             const grp = document.createElement('optgroup');
             grp.label = meta.label;
@@ -2045,11 +2007,8 @@ function showScaleDescription() {
 //  EVENT LISTENERS
 // ═══════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function () {
-    // Wire up category + scale selects
     document.getElementById('categorySelect').addEventListener('change', filterScales);
     document.getElementById('scaleSelect').addEventListener('change', showScaleDescription);
-
-    // Populate scale list on load (show all by default)
     filterScales();
 
     document.getElementById('launchBtn').addEventListener('click', loadScale);
@@ -2110,7 +2069,6 @@ function loadQuestions() {
     currentScale.questions.forEach((q, qi) => {
         const card = document.createElement('div');
         card.className = 'question-card';
-        // Strip domain prefix label [Domain] from display text
         const displayQ = q.replace(/^\[.*?\]\s*/,'');
         const domainTag = q.match(/^\[(.*?)\]/);
         const tagHtml = domainTag
@@ -2125,7 +2083,6 @@ function loadQuestions() {
         const grid = card.querySelector(`#opts-${qi}`);
 
         opts.forEach((optText, oi)=>{
-            // domain-weighted: values always start at 0 matching option index
             const val = isDomainWeighted ? oi : (currentScale.scoring.startsWith('1') ? oi+1 : oi);
             const cleanLabel = optText.replace(/\s*\(\d[^)]*\)\s*$/,'').trim();
             const valNum = optText.match(/\((\d)\)/);
@@ -2331,7 +2288,6 @@ function showInterpretation() {
 function downloadCSVTemplate() {
     if(!currentScale){showAlert('Please load a scale first','warning');return;}
     const scoring=currentScale.scoring;
-    // domain-weighted (FSFI): items are 0-5
     const isDomainWeighted = scoring === 'domain-weighted';
     const min = isDomainWeighted ? 0 : (scoring.startsWith('1') ? 1 : 0);
     const max = isDomainWeighted ? 5 :
@@ -2351,7 +2307,6 @@ function downloadCSVTemplate() {
         rows.push(row.join(','));
     }
 
-    // Add a header comment row explaining the scale
     const comment=`# Scale: ${currentScale.title} | Scoring: ${currentScale.scoring} per item | Max Score: ${currentScale.maxScore}`;
     const csv=[comment,...rows].join('\n');
 
@@ -2388,7 +2343,7 @@ function handleCSV(event) {
 function showCSVPreview(data) {
     if(!data.length) return;
     const preview=data.slice(0,5);
-    const cols=Object.keys(preview[0]).slice(0,10); // cap at 10 cols for display
+    const cols=Object.keys(preview[0]).slice(0,10);
     let html=`<table><thead><tr>${cols.map(c=>`<th>${c}</th>`).join('')}${Object.keys(preview[0]).length>10?'<th>…</th>':''}</tr></thead><tbody>`;
     preview.forEach(row=>{
         html+=`<tr>${cols.map(c=>`<td>${row[c]||''}</td>`).join('')}${Object.keys(row).length>10?'<td>…</td>':''}</tr>`;
@@ -2416,7 +2371,6 @@ function processBatch() {
             }
             if(!ok){invalid++;return;}
 
-            // Use custom domain-weighted scorer if defined (e.g. FSFI), otherwise standard sum
             let total;
             if(currentScale.customScore){
                 total = currentScale.customScore(resp);
@@ -2433,7 +2387,6 @@ function processBatch() {
                 });
             }
 
-            // Get interpretation using the same logic
             let interp;
             if(currentScale.customScore){
                 interp=currentScale.interpretation(total);
@@ -2518,7 +2471,6 @@ function exportPDF() {
         const interp=getInterpretation();
         const mg=20; let y=mg;
 
-        // Header bar
         doc.setFillColor(20,20,40);
         doc.rect(0,0,210,42,'F');
         doc.setFillColor(124,106,247);
@@ -2539,7 +2491,6 @@ function exportPDF() {
         const dLines=doc.splitTextToSize(currentScale.description,170);
         doc.text(dLines,mg,y); y+=dLines.length*5+8;
 
-        // Score box
         doc.setFillColor(245,243,255);
         doc.roundedRect(mg,y,170,22,4,4,'F');
         doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(80,60,180);
@@ -2597,7 +2548,6 @@ function exportBatchPDF() {
         y=50;
         doc.setTextColor(40,40,80); doc.setFontSize(11); doc.setFont('helvetica','bold');
         doc.text('Participant Results',20,y); y+=8;
-        // Header row
         doc.setFillColor(235,232,255); doc.rect(18,y-5,174,8,'F');
         doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(60,40,140);
         doc.text('ID',22,y); doc.text('Date',60,y); doc.text('Score',100,y); doc.text('Severity',130,y);
@@ -2688,6 +2638,7 @@ function showAlert(message,type) {
     area.appendChild(div);
     setTimeout(()=>{if(div.parentNode){div.style.opacity='0';setTimeout(()=>div.remove(),300);}},5000);
 }
+
 // ═══════════════════════════════════════════════════
 //  SIDE MARQUEE PANELS
 // ═══════════════════════════════════════════════════
@@ -2739,7 +2690,6 @@ function showAlert(message,type) {
     ];
 
     function buildTrack(el, items) {
-        // Duplicate so the infinite scroll is seamless
         const doubled = [...items, ...items];
         doubled.forEach(item => {
             const pill = document.createElement('span');
@@ -2782,20 +2732,18 @@ const REACTION_EMOJIS = ['❤️','👍','🤗','💙','✨','😊'];
 
 // ── State ──────────────────────────────────────────
 let chatState = {
-    user: null,           // { name, token, uid, avatarColor }
+    user: null,
     room: 'anxiety',
     selectedRoom: 'anxiety',
-    // Firestore unsubscribe handles
     unsubMessages: null,
     unsubPresence: null,
     unsubDMInbox: null,
     unsubPMThread: null,
-    // Local cache
-    roomMessages: {},     // { roomKey: [msg,...] }
-    onlineUsers: [],      // [{ name, uid, avatarColor }]
-    dms: {},              // { threadId: { messages:[], unread:0, otherName, threadId } }
-    activePM: null,       // threadId
-    pendingDMRequests: [],// incoming DM docs
+    roomMessages: {},
+    onlineUsers: [],
+    dms: {},
+    activePM: null,
+    pendingDMRequests: [],
     emojiOpen: false,
     heartbeatInterval: null,
     typingTimeout: null,
@@ -2811,20 +2759,25 @@ function generateToken() {
     for(let i=0;i<4;i++) t+=c[Math.floor(Math.random()*c.length)];
     return t;
 }
+
 function generateUID() {
     return Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 }
+
 function getAvatarColor(name) {
     let h=0;
     for(let i=0;i<name.length;i++) h=name.charCodeAt(i)+((h<<5)-h);
     return AVATAR_COLORS[Math.abs(h)%AVATAR_COLORS.length];
 }
+
 function getInitials(name){ return (name||'?').slice(0,2).toUpperCase(); }
+
 function formatTime(ts){
     if(!ts) return '';
     const d = ts.toDate ? ts.toDate() : new Date(ts);
     return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
 }
+
 function detectMood(text) {
     const t=text.toLowerCase();
     if(/anxious|panic|nervous|worry|scared|afraid|dread/.test(t)) return {tag:'Anxious',cls:'mood-anxious',icon:'😰'};
@@ -2834,8 +2787,11 @@ function detectMood(text) {
     if(/calm|peace|relax|content|serene|okay|fine/.test(t))       return {tag:'Calm',cls:'mood-calm',icon:'🌿'};
     return {tag:'Sharing',cls:'mood-neutral',icon:'💭'};
 }
+
 function escapeHtml(t){ return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); }
+
 function dmThreadId(a,b){ return [a,b].sort().join('__'); }
+
 function waitForFirebase(cb){
     if(window._fbReady) cb(window._fb);
     else document.addEventListener('firebaseReady',()=>cb(window._fb),{once:true});
@@ -2852,18 +2808,13 @@ function showChat() {
     document.getElementById('sessionToken').textContent=generateToken();
     populateEmojiPicker();
 }
-const _origShowLanding=showLanding;
-function showLanding(){
-    document.getElementById('chat').style.display='none';
-    _origShowLanding();
-}
 
-// ── Login ──────────────────────────────────────────
 function selectRoom(el){
     document.querySelectorAll('.chat-room-opt').forEach(o=>o.classList.remove('selected'));
     el.classList.add('selected');
     chatState.selectedRoom=el.dataset.room;
 }
+
 function copyToken(){
     const tok=document.getElementById('sessionToken').textContent;
     navigator.clipboard.writeText(tok).then(()=>{
@@ -2871,6 +2822,7 @@ function copyToken(){
         btn.textContent='Copied!'; setTimeout(()=>btn.textContent='Copy',2000);
     });
 }
+
 function joinChat(){
     const name=document.getElementById('chatUsername').value.trim();
     if(!name||name.length<2){
@@ -2882,6 +2834,7 @@ function joinChat(){
     const uid=generateUID();
     enterChatRoom(name,token,uid,chatState.selectedRoom);
 }
+
 function rejoinChat(){
     const token=document.getElementById('rejoinToken').value.trim();
     if(!token.startsWith('MM-')){
@@ -2901,7 +2854,6 @@ function enterChatRoom(name,token,uid,room){
     chatState.activePM=null;
     chatState.roomMessages={};
 
-    // Update header UI
     const rm=CHAT_ROOMS[room];
     document.getElementById('chatRoomName').textContent=`${rm.icon} ${rm.name}`;
     document.getElementById('chatHeaderUser').textContent=name;
@@ -2913,21 +2865,15 @@ function enterChatRoom(name,token,uid,room){
     switchSidebarTab('users');
 
     waitForFirebase(fb=>{
-        // Write presence
         writePresence(fb,room);
-        // Subscribe room messages
         subscribeRoom(fb,room);
-        // Subscribe presence list
         subscribePresence(fb,room);
-        // Subscribe DM inbox (incoming requests)
         subscribeDMInbox(fb);
     });
 
-    // Wire textarea
     const ta=document.getElementById('chatTextarea');
     ta.value='';
     ta.focus();
-    // Remove old listeners by cloning
     const newTa=ta.cloneNode(true);
     ta.parentNode.replaceChild(newTa,ta);
     newTa.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} });
@@ -2941,11 +2887,9 @@ function leaveChat(){
     waitForFirebase(fb=>{
         if(chatState.user){
             const {db,doc,deleteDoc}=fb;
-            // Remove presence
             deleteDoc(doc(db,'presence',chatState.user.uid)).catch(()=>{});
         }
     });
-    // Unsubscribe all listeners
     ['unsubMessages','unsubPresence','unsubDMInbox','unsubPMThread'].forEach(k=>{
         if(chatState[k]){ chatState[k](); chatState[k]=null; }
     });
@@ -2969,22 +2913,15 @@ function writePresence(fb,room){
     const ref=doc(db,'presence',uid);
     const data={uid,name,avatarColor,room,lastSeen:serverTimestamp()};
     setDoc(ref,data).catch(()=>{});
-    // Heartbeat every 30s
     clearInterval(chatState.heartbeatInterval);
     chatState.heartbeatInterval=setInterval(()=>{
         setDoc(ref,{...data,lastSeen:serverTimestamp()},{merge:true}).catch(()=>{});
     },30000);
-    // Clean up on page unload
-    window.addEventListener('beforeunload',()=>{ try{ navigator.sendBeacon && deletePresence(fb); }catch(e){} });
 }
-function deletePresence(fb){
-    const {db,doc,deleteDoc}=fb;
-    if(chatState.user) deleteDoc(doc(db,'presence',chatState.user.uid)).catch(()=>{});
-}
+
 function subscribePresence(fb,room){
     const {db,collection,query,where,onSnapshot}=fb;
     if(chatState.unsubPresence){ chatState.unsubPresence(); }
-    // Show users in the same room, seen in last 90 seconds
     const q=query(collection(db,'presence'),where('room','==',room));
     chatState.unsubPresence=onSnapshot(q,snap=>{
         const now=Date.now();
@@ -3004,15 +2941,20 @@ function subscribePresence(fb,room){
 function subscribeRoom(fb,room){
     const {db,collection,query,orderBy,limit,onSnapshot}=fb;
     if(chatState.unsubMessages){ chatState.unsubMessages(); }
-    // Load last 80 messages, then listen for new ones
     const q=query(collection(db,`rooms/${room}/messages`),orderBy('ts','asc'),limit(80));
     chatState.unsubMessages=onSnapshot(q,snap=>{
         const msgs=snap.docs.map(d=>({id:d.id,...d.data()}));
         chatState.roomMessages[room]=msgs;
         if(chatState.room===room) renderMessages();
     });
-    // System "joined" message
     waitForFirebase(fb2=>postSystemMessage(fb2,room,`${chatState.user.name} joined the room ✨`));
+}
+
+function postSystemMessage(fb,room,text){
+    const {db,collection,addDoc,serverTimestamp}=fb;
+    addDoc(collection(db,`rooms/${room}/messages`),{
+        type:'system', text, ts:serverTimestamp()
+    }).catch(()=>{});
 }
 
 async function sendMessage(){
@@ -3036,13 +2978,6 @@ async function sendMessage(){
             ts:serverTimestamp()
         }).catch(e=>console.error('Send failed:',e));
     });
-}
-
-function postSystemMessage(fb,room,text){
-    const {db,collection,addDoc,serverTimestamp}=fb;
-    addDoc(collection(db,`rooms/${room}/messages`),{
-        type:'system', text, ts:serverTimestamp()
-    }).catch(()=>{});
 }
 
 async function addReaction(msgId,emoji){
@@ -3113,11 +3048,9 @@ function scrollToBottom(){ const c=document.getElementById('chatMessages'); c.sc
 // ── Room switch ────────────────────────────────────
 function switchRoom(btn){
     const room=btn.dataset.room;
-    // Update presence room
     waitForFirebase(fb=>{
         const {db,doc,setDoc,serverTimestamp}=fb;
         setDoc(doc(db,'presence',chatState.user.uid),{room,lastSeen:serverTimestamp()},{merge:true}).catch(()=>{});
-        // Unsubscribe old, subscribe new
         chatState.room=room;
         subscribeRoom(fb,room);
         subscribePresence(fb,room);
@@ -3147,7 +3080,6 @@ function renderOnlineList(){
 }
 
 function updateRoomCounts(){
-    // For simplicity: show current room's count everywhere
     const cnt=chatState.onlineUsers.length||0;
     Object.keys(CHAT_ROOMS).forEach(r=>{
         const el=document.getElementById(`cnt-${r}`);
@@ -3161,7 +3093,6 @@ function inititateDM(targetUid,targetName){
     const threadId=dmThreadId(chatState.user.uid,targetUid);
     waitForFirebase(async fb=>{
         const {db,doc,setDoc,serverTimestamp}=fb;
-        // Create or ensure thread doc
         const threadRef=doc(db,'dms',threadId);
         await setDoc(threadRef,{
             participants:[chatState.user.uid,targetUid],
@@ -3170,14 +3101,12 @@ function inititateDM(targetUid,targetName){
             status:'pending',
             requestFrom:chatState.user.uid
         },{merge:true}).catch(()=>{});
-        // Send a DM-request notification to the target
         const notifRef=doc(db,'dmRequests',`${threadId}_${targetUid}`);
         await setDoc(notifRef,{
             threadId, toUid:targetUid, toName:targetName,
             fromUid:chatState.user.uid, fromName:chatState.user.name,
             fromAvatar:chatState.user.avatarColor, ts:serverTimestamp(), status:'pending'
         }).catch(()=>{});
-        // Open PM window for sender
         if(!chatState.dms[threadId]){
             chatState.dms[threadId]={ messages:[], unread:0, otherName:targetName, threadId };
         }
@@ -3199,7 +3128,6 @@ function openPM(threadId,otherName,otherUid){
     document.getElementById('pmWithName').textContent=otherName;
     document.getElementById('pmWindow').classList.add('open');
 
-    // Subscribe to this DM thread messages
     if(chatState.unsubPMThread){ chatState.unsubPMThread(); chatState.unsubPMThread=null; }
     waitForFirebase(fb=>{
         const {db,collection,query,orderBy,onSnapshot}=fb;
@@ -3218,7 +3146,6 @@ function openPM(threadId,otherName,otherUid){
         });
     });
 
-    // Wire textarea
     const ta=document.getElementById('pmTextarea');
     ta.value=''; ta.style.height='auto'; ta.focus();
     const newTa=ta.cloneNode(true);
@@ -3247,7 +3174,6 @@ async function sendPM(){
             text, fromUid:chatState.user.uid, fromName:chatState.user.name,
             avatarColor:chatState.user.avatarColor, ts:serverTimestamp()
         }).catch(e=>console.error('PM send failed:',e));
-        // Mark thread as accepted/active
         await updateDoc(doc(db,'dms',threadId),{status:'active'}).catch(()=>{});
     });
 }
@@ -3278,7 +3204,7 @@ function scrollPMToBottom(){ const c=document.getElementById('pmMessages'); if(c
 
 // ── DM inbox (incoming requests) ──────────────────
 function subscribeDMInbox(fb){
-    const {db,collection,query,where,onSnapshot,doc,deleteDoc}=fb;
+    const {db,collection,query,where,onSnapshot,deleteDoc,doc}=fb;
     if(chatState.unsubDMInbox){ chatState.unsubDMInbox(); }
     const uid=chatState.user.uid;
     const q=query(collection(db,'dmRequests'),where('toUid','==',uid),where('status','==','pending'));
@@ -3308,11 +3234,8 @@ function acceptDMRequest(req,docId){
     document.getElementById('dmRequestToast').classList.remove('show');
     waitForFirebase(async fb=>{
         const {db,doc,updateDoc,deleteDoc}=fb;
-        // Mark request handled
         await deleteDoc(doc(db,'dmRequests',docId)).catch(()=>{});
-        // Update thread status
         await updateDoc(doc(db,'dms',req.threadId),{status:'active'}).catch(()=>{});
-        // Open the PM window
         if(!chatState.dms[req.threadId]){
             chatState.dms[req.threadId]={messages:[],unread:0,otherName:req.fromName,threadId:req.threadId};
         }
@@ -3374,12 +3297,6 @@ function switchSidebarTab(tab){
     if(tab==='dms') renderDMList();
 }
 
-// ── Typing indicator ───────────────────────────────
-function handleTypingInput(){
-    clearTimeout(chatState.typingTimeout);
-    chatState.typingTimeout=setTimeout(()=>{ document.getElementById('typingIndicator').textContent=''; },2000);
-}
-
 // ── Emoji picker ───────────────────────────────────
 function populateEmojiPicker(){
     const picker=document.getElementById('emojiPicker');
@@ -3391,6 +3308,7 @@ function populateEmojiPicker(){
         picker.appendChild(span);
     });
 }
+
 function toggleEmoji(){
     const picker=document.getElementById('emojiPicker');
     chatState.emojiOpen=!chatState.emojiOpen;
@@ -3410,23 +3328,17 @@ async function getAISuggestions(){
     const btn=document.querySelector('.chat-ai-btn');
     btn.innerHTML='<i class="fas fa-circle-notch fa-spin"></i> Thinking…'; btn.disabled=true;
     try{
-        const res=await fetch('https://api.anthropic.com/v1/messages',{
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:200,
-                system:`You are warm and empathetic, in a wellness room called "${room.name}". Generate exactly 3 short supportive reply suggestions. Output ONLY a JSON array of 3 strings.`,
-                messages:[{role:'user',content:`Recent chat:\n${msgs}\n\nGenerate 3 warm reply suggestions.`}]})
-        });
-        const data=await res.json();
-        const suggestions=JSON.parse((data.content?.[0]?.text||'[]').replace(/```json|```/g,'').trim());
-        showSuggestions(suggestions.slice(0,3));
-    }catch(e){
+        // Mock response since we don't have real API key
         const fb={anxiety:['I really relate to that feeling 🌿','You\'re not alone ✨','Breathing slowly helps me 💙'],relationships:['That takes real courage to share 💞','Communication is everything 💙','Sending warmth 🌸'],mood:['Your feelings are valid 🌈','Small steps count 💪','I\'m here with you 💙'],general:['So glad you\'re here ☕','This community helps 🌿','Thank you for sharing 💙']};
         showSuggestions(fb[chatState.room]||fb.general);
+    }catch(e){
+        showSuggestions(['Share more if you\'d like 💙','We\'re here to listen 🌿','How does that make you feel? ✨']);
     }finally{
         chatState.aiLoading=false;
         btn.innerHTML='<i class="fas fa-magic"></i> Ideas'; btn.disabled=false;
     }
 }
+
 function showSuggestions(suggestions){
     const panel=document.getElementById('aiSuggestions');
     panel.innerHTML=`<span class="ai-suggest-label"><i class="fas fa-robot"></i> AI Ideas</span>`;
