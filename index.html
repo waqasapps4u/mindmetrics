@@ -7,6 +7,7 @@
     <!-- Firebase SDK -->
     <script type="module">
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+      import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
       import {
         getFirestore, collection, addDoc, onSnapshot, query, orderBy, limit,
         doc, setDoc, deleteDoc, serverTimestamp, where, getDocs, updateDoc, getDoc
@@ -22,10 +23,13 @@
       };
 
       const app = initializeApp(firebaseConfig);
+      const auth = getAuth(app);
+      const provider = new GoogleAuthProvider();
       const db = getFirestore(app);
 
       window._fb = {
-        db, collection, addDoc, onSnapshot, query, orderBy, limit,
+        db, auth, provider, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
+        collection, addDoc, onSnapshot, query, orderBy, limit,
         doc, setDoc, deleteDoc, serverTimestamp, where, getDocs, updateDoc, getDoc
       };
       window._fbReady = true;
@@ -95,6 +99,17 @@ body::before{content:'';position:fixed;inset:0;
 .nav-logo{display:flex;align-items:center;gap:12px;font-family:'Playfair Display',serif;font-size:1.6rem;font-weight:700;color:var(--text);text-decoration:none;cursor:pointer;letter-spacing:-.01em}
 .nav-logo-icon{width:40px;height:40px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;box-shadow:0 4px 16px rgba(123,104,238,.4)}
 .nav-pill{background:rgba(167,139,250,.14);border:1px solid rgba(167,139,250,.32);border-radius:100px;padding:7px 20px;font-size:.8rem;font-weight:600;color:var(--accent2);letter-spacing:.07em;text-transform:uppercase}
+.nav-auth{display:flex;align-items:center;gap:12px}
+
+.auth-btn{background:rgba(255,255,255,.08);border:1.5px solid var(--border2);border-radius:100px;padding:8px 18px;font-family:'Plus Jakarta Sans',sans-serif;font-size:.85rem;font-weight:600;color:var(--text);cursor:pointer;transition:all .25s;display:flex;align-items:center;gap:8px}
+.auth-btn:hover{background:rgba(123,104,238,.15);border-color:rgba(167,139,250,.4);transform:translateY(-1px)}
+.auth-btn.google{background:linear-gradient(135deg,#DB4437,#F4B400);color:#fff;border:none}
+.auth-btn.google:hover{box-shadow:0 4px 16px rgba(219,68,55,.3);transform:translateY(-1px)}
+.user-profile{display:flex;align-items:center;gap:8px;padding:4px 12px 4px 6px;border-radius:100px;background:rgba(123,104,238,.12);border:1.5px solid rgba(123,104,238,.25)}
+.user-avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;color:#fff}
+.user-name{font-size:.8rem;font-weight:600;color:var(--text)}
+.logout-btn{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px;transition:all .2s}
+.logout-btn:hover{color:var(--red);background:rgba(248,113,113,.1)}
 
 .hero{position:relative;z-index:10;flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:64px 48px 88px}
 .hero-badge{display:inline-flex;align-items:center;gap:9px;background:rgba(123,104,238,.14);border:1px solid rgba(123,104,238,.35);border-radius:100px;padding:9px 22px;font-size:.85rem;font-weight:600;color:#c4b9ff;margin-bottom:34px;letter-spacing:.05em;animation:fadeUp .6s ease both}
@@ -732,7 +747,10 @@ body:has(#chat.active) .float-card {
         </div>
         <div style="display:flex;align-items:center;gap:14px">
             <button class="nav-chat-btn" onclick="showChat()"><i class="fas fa-comments"></i> Community Chat</button>
-            <span class="nav-pill">✦ Professional Platform</span>
+            <div class="nav-auth" id="authContainer">
+                <!-- Auth UI will be injected here -->
+                <button class="auth-btn google" onclick="signInWithGoogle()"><i class="fab fa-google"></i> Sign in with Google</button>
+            </div>
         </div>
     </nav>
 
@@ -1392,6 +1410,101 @@ function showScaleDescription() {
         box.style.display = 'none';
     }
 }
+
+// ====================================================
+// AUTHENTICATION
+// ====================================================
+let currentUser = null;
+
+function waitForFirebase(cb, maxAttempts = 20) {
+    let attempts = 0;
+    const check = () => {
+        if (window._fbReady) {
+            cb(window._fb);
+        } else if (attempts < maxAttempts) {
+            attempts++;
+            setTimeout(check, 250);
+        } else {
+            console.error('Firebase not ready');
+        }
+    };
+    check();
+}
+
+function signInWithGoogle() {
+    waitForFirebase(async (fb) => {
+        try {
+            const result = await fb.signInWithPopup(fb.auth, fb.provider);
+            const user = result.user;
+            currentUser = {
+                uid: user.uid,
+                name: user.displayName,
+                email: user.email,
+                photoURL: user.photoURL
+            };
+            updateAuthUI();
+            showAlert(`Welcome, ${user.displayName}!`, 'success');
+        } catch (error) {
+            console.error('Sign in error:', error);
+            showAlert('Failed to sign in with Google', 'danger');
+        }
+    });
+}
+
+function signOut() {
+    waitForFirebase(async (fb) => {
+        try {
+            await fb.signOut(fb.auth);
+            currentUser = null;
+            updateAuthUI();
+            showAlert('Signed out successfully', 'info');
+        } catch (error) {
+            console.error('Sign out error:', error);
+        }
+    });
+}
+
+function updateAuthUI() {
+    const container = document.getElementById('authContainer');
+    if (currentUser) {
+        const initials = currentUser.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        container.innerHTML = `
+            <div class="user-profile">
+                <div class="user-avatar" style="background:linear-gradient(135deg,${getAvatarColor(currentUser.name)})">${initials}</div>
+                <span class="user-name">${currentUser.name.split(' ')[0]}</span>
+                <button class="logout-btn" onclick="signOut()" title="Sign out"><i class="fas fa-sign-out-alt"></i></button>
+            </div>
+        `;
+    } else {
+        container.innerHTML = `<button class="auth-btn google" onclick="signInWithGoogle()"><i class="fab fa-google"></i> Sign in with Google</button>`;
+    }
+}
+
+function getAvatarColor(name) {
+    const colors = ['#f472b6', '#7b68ee', '#34d399', '#fbbf24', '#f87171'];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+}
+
+// Initialize auth state
+waitForFirebase((fb) => {
+    fb.onAuthStateChanged(fb.auth, (user) => {
+        if (user) {
+            currentUser = {
+                uid: user.uid,
+                name: user.displayName,
+                email: user.email,
+                photoURL: user.photoURL
+            };
+        } else {
+            currentUser = null;
+        }
+        updateAuthUI();
+    });
+});
 
 // ====================================================
 // EVENT LISTENERS
@@ -2059,12 +2172,6 @@ function generateUID() {
     return Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 }
 
-function getAvatarColor(name) {
-    let h=0;
-    for(let i=0;i<name.length;i++) h=name.charCodeAt(i)+((h<<5)-h);
-    return AVATAR_COLORS[Math.abs(h)%AVATAR_COLORS.length];
-}
-
 function getInitials(name){ return (name||'?').slice(0,2).toUpperCase(); }
 
 function formatTime(ts){
@@ -2088,22 +2195,6 @@ function detectMood(text) {
 function escapeHtml(t){ 
     if (!t) return '';
     return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'); 
-}
-
-function waitForFirebase(cb, maxAttempts = 20){
-    let attempts = 0;
-    const check = () => {
-        if (window._fbReady) {
-            cb(window._fb);
-        } else if (attempts < maxAttempts) {
-            attempts++;
-            setTimeout(check, 250);
-        } else {
-            console.error('Firebase not ready after', maxAttempts, 'attempts');
-            showAlert('Chat system loading... please refresh', 'warning');
-        }
-    };
-    check();
 }
 
 // Navigation
@@ -2157,7 +2248,7 @@ function rejoinChat(){
 }
 
 function enterChatRoom(name,token,uid,room){
-    chatState.user={name,token,uid,room,avatarColor:getAvatarColor(name)};
+    chatState.user={name,token,uid,room,avatarColor:AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)]};
     chatState.room=room;
     chatState.roomMessages = {};
     chatState.onlineUsers = [];
@@ -2167,7 +2258,7 @@ function enterChatRoom(name,token,uid,room){
     document.getElementById('chatHeaderUser').textContent=name;
     const hav=document.getElementById('chatHeaderAvatar');
     hav.textContent=getInitials(name);
-    hav.style.background=getAvatarColor(name);
+    hav.style.background=chatState.user.avatarColor;
     document.getElementById('chatLogin').style.display='none';
     document.getElementById('chatRoom').classList.add('active');
     switchSidebarTab('users');
@@ -2404,7 +2495,7 @@ function renderMessages(){
         
         g.innerHTML=`
             <div class="msg-meta">
-                <div class="msg-avatar" style="background:${msg.avatarColor||getAvatarColor(msg.name)}">${getInitials(msg.name)}</div>
+                <div class="msg-avatar" style="background:${msg.avatarColor||AVATAR_COLORS[0]}">${getInitials(msg.name)}</div>
                 <span class="msg-username">${isMe?'You':escapeHtml(msg.name)}</span>
                 <span class="msg-time">${formatTime(msg.ts)}</span>
             </div>
@@ -2493,7 +2584,7 @@ function renderOnlineList(){
         item.className='chat-online-item';
         
         item.innerHTML=`
-            <div class="chat-user-avatar-sm" style="width:28px;height:28px;background:${u.avatarColor||getAvatarColor(u.name)};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:800;color:#fff;flex-shrink:0">${getInitials(u.name)}</div>
+            <div class="chat-user-avatar-sm" style="width:28px;height:28px;background:${u.avatarColor||AVATAR_COLORS[0]};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:800;color:#fff;flex-shrink:0">${getInitials(u.name)}</div>
             <span class="chat-online-name${isMe?' me':''}">${escapeHtml(u.name)}${isMe?' (you)':''}</span>`;
         
         list.appendChild(item);
